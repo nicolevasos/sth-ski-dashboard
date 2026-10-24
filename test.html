@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Display a map</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.umd.min.js"></script>
+  <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.css" rel="stylesheet" />
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    maptilersdk.config.apiKey = 'XGMBkywGOCmPQIjVuE1X';
+
+    // Bounding box derived from sample.GeoJSON extent (+ 0.002° padding)
+    const DATA_BBOX = {
+      west:  12.726139,
+      south: 47.323943,
+      east:  12.738910,
+      north: 47.330919
+    };
+    const bboxParam =
+      `${DATA_BBOX.west},${DATA_BBOX.south},${DATA_BBOX.east},${DATA_BBOX.north}`;
+
+    const map = new maptilersdk.Map({
+      container: 'map',
+      style: '019f138f-779e-78fa-9899-5db087d490b8',
+      center: [12.732525, 47.327431],  // centroid of the data
+      zoom: 14,
+
+      // Lock tile requests to the data's area of interest
+      transformRequest: (url, resourceType) => {
+        if (resourceType === 'Tile') {
+          const separator = url.includes('?') ? '&' : '?';
+          return { url: `${url}${separator}bbox=${bboxParam}` };
+        }
+      }
+    });
+
+    // Plot the GeoJSON on top
+    map.on('load', () => {
+      fetch('sample.GeoJSON')
+        .then(r => r.json())
+        .then(data => {
+          map.addSource('run', { type: 'geojson', data });
+          map.addLayer({
+            id: 'run-points',
+            type: 'circle',
+            source: 'run',
+            paint: {
+              'circle-radius': 3,
+              'circle-color': '#e74c3c',
+              'circle-opacity': 0.7
+            }
+          });
+        });
+    });
+  </script>
+</body>
+</html>

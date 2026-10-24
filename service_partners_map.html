@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Ski Repair Partners Map</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.umd.min.js"></script>
+<link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.css" rel="stylesheet">
+<style>
+*{box-sizing:border-box}html,body,#map{width:100%;height:100%;margin:0}body{font-family:Inter,Arial,sans-serif;color:#173044;overflow:hidden}#map{position:absolute;inset:0}
+.map-card{position:absolute;z-index:5;background:rgba(255,255,255,.95);border:1px solid rgba(20,60,85,.14);border-radius:12px;box-shadow:0 8px 24px rgba(20,60,85,.18);backdrop-filter:blur(6px)}
+#status{left:12px;bottom:12px;padding:9px 11px;font-size:12px;max-width:260px}.status-title{font-weight:850;color:#315f7b}.status-copy{margin-top:3px;color:#6a8191;line-height:1.35}
+.partner-marker{width:28px;height:28px;border-radius:8px;background:#fff;border:2px solid #2e75aa;box-shadow:0 4px 12px rgba(12,55,82,.26);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .14s ease,background .14s ease,border-color .14s ease,box-shadow .14s ease}
+.partner-marker::before{content:'🔧';font-size:15px;line-height:1}.partner-marker:hover{transform:scale(1.08)}
+.partner-marker.is-highlighted{background:#ffd400;border-color:#f0b400;transform:scale(1.22);box-shadow:0 0 0 6px rgba(255,212,0,.28),0 7px 18px rgba(96,76,0,.3);z-index:10}
+.maplibregl-popup-content{border-radius:12px;padding:12px 14px;box-shadow:0 10px 28px rgba(12,55,82,.24)}.popup-name{font-weight:900;color:#173e64}.popup-meta{margin-top:4px;font-size:12px;color:#607b8d;line-height:1.4}
+</style></head><body>
+<div id="map"></div>
+<div id="status" class="map-card"><div class="status-title">Ski repair partners</div><div id="statusCopy" class="status-copy">Waiting for nearby service partners…</div></div>
+<script>
+const nativeWarn=console.warn.bind(console);console.warn=(...args)=>{const m=args.map(String).join(' ');if(m.includes('same source for a hillshade layer and for 3D terrain'))return;nativeWarn(...args)};
+maptilersdk.config.apiKey='XGMBkywGOCmPQIjVuE1X';
+const map=new maptilersdk.Map({container:'map',style:'019f138f-779e-78fa-9899-5db087d490b8',center:[12.77667,47.32727],zoom:11.8,pitch:0,bearing:0});
+let mapReady=false, partners=[], highlightedId=null, viewportTimer=0, resizeFrame=0, pendingPartnerPayload=null;
+const markers=new Map();
+function cleanPartners(items){return (Array.isArray(items)?items:[]).map((p,index)=>{const latitude=Number(p?.latitude??p?.lat??p?.center?.lat);const longitude=Number(p?.longitude??p?.lon??p?.lng??p?.center?.lon);if(!Number.isFinite(latitude)||!Number.isFinite(longitude)||Math.abs(latitude)>90||Math.abs(longitude)>180)return null;return {...p,id:String(p?.id??p?.osmId??`${latitude.toFixed(7)},${longitude.toFixed(7)},${index}`),latitude,longitude}}).filter(Boolean)}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function popupHtml(p){const distance=Number.isFinite(Number(p.distanceKm))?`${Number(p.distanceKm).toFixed(1)} km from route`:'';const caps=Array.isArray(p.capabilities)?p.capabilities.join(' · '):'';return `<div class="popup-name">${esc(p.name||'Service partner')}</div><div class="popup-meta">${esc([distance,caps,p.address].filter(Boolean).join('<br>')).replace(/&lt;br&gt;/g,'<br>')}</div>`}
+function clearMarkers(){markers.forEach(entry=>entry.marker.remove());markers.clear()}
+function markerFor(p){const el=document.createElement('button');el.type='button';el.className='partner-marker';el.title=p.name||'Service partner';el.setAttribute('aria-label',`Select ${p.name||'service partner'}`);el.addEventListener('click',event=>{event.stopPropagation();selectPartner(p.id,{fly:false,notify:true,openPopup:true})});const popup=new maptilersdk.Popup({offset:18,closeButton:true}).setHTML(popupHtml(p));const marker=new maptilersdk.Marker({element:el,anchor:'center'}).setLngLat([p.longitude,p.latitude]).setPopup(popup).addTo(map);markers.set(p.id,{marker,el,popup,partner:p})}
+function renderPartners(items,fit=true){partners=cleanPartners(items);clearMarkers();partners.forEach(markerFor);document.getElementById('statusCopy').textContent=partners.length?`${partners.length} partner${partners.length===1?'':'s'} loaded. Pan or zoom to filter the list.`:`No valid partner coordinates received (${Array.isArray(items)?items.length:0} records).`;if(fit&&partners.length){const b=new maptilersdk.LngLatBounds();partners.forEach(p=>b.extend([p.longitude,p.latitude]));if(!b.isEmpty()){map.stop();map.fitBounds(b,{padding:70,maxZoom:14,duration:0})}}requestAnimationFrame(()=>scheduleViewportMessage())}
+function selectPartner(id,{fly=true,notify=false,openPopup=false}={}){highlightedId=String(id||'');markers.forEach((entry,key)=>entry.el.classList.toggle('is-highlighted',key===highlightedId));const entry=markers.get(highlightedId);if(entry){if(fly){map.stop();map.easeTo({center:[entry.partner.longitude,entry.partner.latitude],zoom:Math.max(map.getZoom(),14),duration:650})}if(openPopup){const popup=entry.marker.getPopup?.()||entry.popup;if(popup&&!popup.isOpen?.())popup.addTo(map)}}if(notify)window.parent.postMessage({type:'SKI_SERVICE_PARTNER_SELECTED',partnerId:highlightedId},'*')}
+function currentBBox(){const b=map.getBounds();return {west:b.getWest(),south:b.getSouth(),east:b.getEast(),north:b.getNorth()}}
+function scheduleViewportMessage(){clearTimeout(viewportTimer);viewportTimer=setTimeout(()=>{if(!mapReady)return;window.parent.postMessage({type:'SKI_SERVICE_PARTNER_BBOX',bbox:currentBBox()},'*')},90)}
+map.on('load',()=>{mapReady=true;map.addControl(new maptilersdk.NavigationControl({visualizePitch:false}),'top-right');map.on('moveend',scheduleViewportMessage);window.parent.postMessage({type:'SKI_SERVICE_PARTNER_MAP_READY'},'*');if(pendingPartnerPayload){const payload=pendingPartnerPayload;pendingPartnerPayload=null;renderPartners(payload.partners,payload.fit!==false)}else scheduleViewportMessage()});
+window.addEventListener('message',event=>{const d=event.data||{};if(d.type==='SKI_SERVICE_PARTNERS_DATA'){if(mapReady)renderPartners(d.partners,d.fit!==false);else pendingPartnerPayload={partners:d.partners,fit:d.fit}}else if(d.type==='SKI_SERVICE_PARTNER_HIGHLIGHT'){selectPartner(d.partnerId,{fly:d.fly!==false,notify:false,openPopup:d.openPopup!==false})}else if(d.type==='dashboard-resize'){cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>map.resize())}});
+</script></body></html>

@@ -1,0 +1,3383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ski Resort Map – Optimized</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.umd.min.js"></script>
+  <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.8.0/maptiler-sdk.css" rel="stylesheet">
+  <style>
+    :root {
+      --panel-width: 330px;
+      --border: #d9dee7;
+      --muted: #667085;
+      --text: #20242b;
+      --surface: rgba(255, 255, 255, 0.96);
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--text); font-family: Inter, Arial, sans-serif; }
+    #map { position: absolute; inset: 0; }
+
+    .map-panel {
+      position: absolute;
+      z-index: 2;
+      background: var(--surface);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 10px;
+      box-shadow: 0 4px 18px rgba(15, 23, 42, 0.16);
+      backdrop-filter: blur(6px);
+    }
+
+    #control-panel {
+      top: 12px;
+      right: 12px;
+      width: min(var(--panel-width), calc(100vw - 24px));
+      max-height: calc(100vh - 24px);
+      overflow-y: auto;
+      padding: 14px;
+      font-size: 13px;
+    }
+
+    .control-panel-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin: -4px -4px 8px;
+      padding: 4px;
+      border-radius: 7px;
+      user-select: none;
+    }
+
+    .control-panel-heading { min-width: 0; }
+
+    .panel-title {
+      margin: 0 0 3px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .panel-close-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: #5f6772;
+      font-size: 25px;
+      font-weight: 300;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .panel-close-button:hover {
+      background: #eef1f4;
+      color: #111827;
+    }
+
+    .panel-close-button:focus-visible {
+      outline: 3px solid rgba(55, 155, 210, 0.28);
+      outline-offset: 2px;
+    }
+
+    #control-panel.is-closed { display: none; }
+
+    /* This button is inserted into MapTiler's upper-right control stack,
+       directly below the existing controls, using the same native dimensions. */
+    .map-layer-panel-control button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .map-layer-panel-control svg {
+      width: 20px;
+      height: 20px;
+      display: block;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.1;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+
+
+    .map-3d-control button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .map-3d-control button.is-active {
+      background: #eaf5ff;
+      color: #0b67b2;
+    }
+
+    .legend-poi-row {
+      width: calc(100% + 8px);
+      margin-left: -4px;
+      margin-right: -4px;
+      padding: 3px 4px;
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.14s ease, transform 0.14s ease;
+    }
+
+    .legend-poi-row:hover {
+      background: #fff6b8;
+      transform: translateX(1px);
+    }
+
+    .legend-poi-row:focus-visible {
+      outline: 2px solid #f5c400;
+      outline-offset: 1px;
+      background: #fff6b8;
+    }
+
+
+    .poi-highlight-anchor {
+      width: 30px;
+      height: 30px;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .poi-highlight-marker {
+      position: relative;
+      width: 30px;
+      height: 30px;
+      border: 3px solid #fff7a6;
+      border-radius: 50%;
+      background: rgba(255, 230, 0, 0.72);
+      box-shadow:
+        0 0 0 3px rgba(255, 174, 0, 0.92),
+        0 0 18px 8px rgba(255, 230, 0, 0.92);
+      pointer-events: none;
+      animation: poiLegendPulse 0.7s ease-in-out 4;
+    }
+
+    .poi-highlight-marker::after {
+      content: '';
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      background: #fff200;
+      box-shadow: 0 0 0 2px #ffae00;
+    }
+
+    @keyframes poiLegendPulse {
+      0%, 100% { transform: scale(0.72); opacity: 0.35; }
+      45% { transform: scale(1.35); opacity: 1; }
+    }
+
+    .panel-subtitle {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    select, button {
+      width: 100%;
+      min-height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    select { padding: 5px 26px 5px 8px; }
+    button {
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.15s ease;
+    }
+    button:hover { background: #f4f6f8; }
+
+    .panel-action-button {
+      margin-top: 9px;
+      border-color: #c7d2e2;
+      background: #f8fafc;
+      color: #155fa0;
+      text-align: left;
+      padding: 7px 9px;
+    }
+
+    .panel-action-button:hover { background: #edf5fb; }
+
+    .group-summary-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .group-summary-title {
+      flex: 0 0 auto;
+    }
+
+    details.control-group > summary .panel-action-button {
+      width: auto;
+      min-height: 24px;
+      margin: 0;
+      padding: 2px 7px;
+      border: 0;
+      background: transparent;
+      color: #1769aa;
+      font-size: 10px;
+      font-weight: 650;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    details.control-group > summary .panel-action-button:hover,
+    details.control-group > summary .panel-action-button:focus-visible {
+      background: #edf5fb;
+      outline: none;
+    }
+
+    details.control-group {
+      border-top: 1px solid var(--border);
+      padding: 6px 0 2px;
+    }
+
+    details.control-group > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      list-style: none;
+      padding: 4px 0 5px;
+      font-weight: 700;
+      user-select: none;
+    }
+
+    details.control-group > summary::-webkit-details-marker { display: none; }
+    details.control-group > summary::after {
+      content: '⌄';
+      color: var(--muted);
+      font-size: 14px;
+      transform: rotate(0deg);
+      transition: transform 0.15s ease;
+    }
+    details.control-group[open] > summary::after { transform: rotate(180deg); }
+
+    .layer-row {
+      display: grid;
+      grid-template-columns: minmax(118px, 1fr) 100px 34px;
+      align-items: center;
+      gap: 7px;
+      min-height: 31px;
+    }
+
+    .layer-row.visibility-only {
+      grid-template-columns: 1fr;
+    }
+
+    .layer-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      cursor: pointer;
+    }
+
+    .layer-toggle span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .layer-toggle input { margin: 0; }
+    .opacity-slider { width: 100%; cursor: pointer; }
+    .opacity-value { color: var(--muted); font-size: 11px; text-align: right; }
+    .unavailable { opacity: 0.45; }
+
+    #legend-panel {
+      left: 12px;
+      bottom: 12px;
+      width: min(290px, calc(100vw - 24px));
+      max-height: 55vh;
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    #legend-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 12px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    #legend-body {
+      max-height: calc(55vh - 38px);
+      overflow-y: auto;
+      padding: 0 12px 11px;
+    }
+
+    .legend-section-title {
+      margin: 9px 0 4px;
+      color: #4b5563;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 4px 0;
+    }
+
+    .legend-subsection-title {
+      margin: 8px 0 4px;
+      color: #111827;
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .legend-row.is-not-visible {
+      opacity: 0.42;
+    }
+
+    .legend-row.is-not-visible span:last-child::after {
+      content: ' · outside view';
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .legend-more {
+      margin: 4px 0 1px 21px;
+      color: var(--muted);
+      font-size: 10px;
+      font-style: italic;
+    }
+
+    .legend-icon-frame {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border: 1px solid rgba(0, 0, 0, 0.16);
+      border-radius: 3px;
+      flex: 0 0 auto;
+      overflow: hidden;
+    }
+
+    .legend-icon-frame img {
+      width: 12px;
+      height: 12px;
+      object-fit: contain;
+    }
+
+    .legend-icon-mask {
+      display: block;
+      width: 14px;
+      height: 14px;
+      background: #ffffff;
+      -webkit-mask-image: var(--icon-url);
+      mask-image: var(--icon-url);
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      mask-position: center;
+      -webkit-mask-size: contain;
+      mask-size: contain;
+    }
+
+    .legend-row svg {
+      display: block;
+      overflow: visible;
+    }
+
+    .legend-line {
+      width: 22px;
+      height: 0;
+      border-top: 3px solid #667085;
+      border-radius: 2px;
+      flex: 0 0 auto;
+    }
+
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid rgba(0, 0, 0, 0.18);
+      flex: 0 0 auto;
+    }
+
+    .legend-gradient {
+      width: 88px;
+      height: 10px;
+      border-radius: 5px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      background: linear-gradient(90deg, #2c7bb6, #abd9e9, #ffffbf, #fdae61, #d7191c);
+      flex: 0 0 auto;
+    }
+
+    .legend-gradient-labels {
+      display: flex;
+      justify-content: space-between;
+      width: 88px;
+      margin-top: -2px;
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .legend-symbol {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      color: #fff;
+      background: #d7191c;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+
+    .empty-message { color: var(--muted); font-style: italic; }
+
+    .conventions-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.52);
+    }
+
+    .conventions-modal.is-open { display: flex; }
+
+    .conventions-dialog {
+      width: min(980px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.32);
+      padding: 22px;
+    }
+
+    .conventions-header {
+      position: sticky;
+      top: -22px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: -22px -22px 16px;
+      padding: 18px 22px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(6px);
+    }
+
+    .conventions-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 750;
+    }
+
+    .conventions-close {
+      width: 34px;
+      min-height: 34px;
+      border: 0;
+      background: transparent;
+      color: #6b7280;
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .conventions-section { margin-top: 22px; }
+    .conventions-section:first-of-type { margin-top: 0; }
+    .conventions-section h3 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+
+    .convention-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .convention-card {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      min-height: 86px;
+      padding: 13px;
+      border-radius: 8px;
+      background: #f1f1f2;
+    }
+
+    .convention-label { font-weight: 650; }
+    .convention-description {
+      margin-top: 3px;
+      color: #5f6368;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .convention-line {
+      position: relative;
+      width: 66px;
+      height: 0;
+      border-top: 4px solid #0b69b7;
+      border-radius: 99px;
+    }
+
+    .convention-line.double { border-top-width: 8px; border-color: #0b69b7; box-shadow: inset 0 0 0 3px #fff; }
+    .convention-line.dashed { border-top-style: dashed; }
+    .convention-line.dotted { border-top-style: dotted; }
+    .convention-line.lift { border-color: #d7191c; }
+    .convention-line.private { border-color: #d7191c; border-top-style: dashed; }
+    .convention-line.non-operating { border-color: #b33a3a; border-top-style: dashed; opacity: .8; }
+    .convention-line.snow { border-color: #0b69b7; box-shadow: 0 0 0 5px #9ff3ff; }
+    .convention-line.lit { border-color: #0b69b7; box-shadow: 0 0 0 3px #f6eb00; }
+
+    .difficulty-tabs {
+      display: inline-flex;
+      margin-bottom: 12px;
+      border: 1px solid #cfd4dc;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .difficulty-tab {
+      width: auto;
+      min-height: 34px;
+      padding: 7px 14px;
+      border: 0;
+      border-right: 1px solid #cfd4dc;
+      border-radius: 0;
+      background: #fff;
+      font-weight: 500;
+    }
+
+    .difficulty-tab:last-child { border-right: 0; }
+    .difficulty-tab.is-active { background: #e9eaec; color: #111827; }
+
+    .difficulty-panel { display: none; }
+    .difficulty-panel.is-active { display: block; }
+
+    .difficulty-box {
+      margin-top: 12px;
+      padding: 15px;
+      border-radius: 8px;
+      background: #f1f1f2;
+    }
+
+    .difficulty-list {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .difficulty-item { min-width: 0; text-align: center; }
+    .difficulty-color {
+      height: 18px;
+      margin-bottom: 7px;
+      border-radius: 5px;
+    }
+    .difficulty-name { font-weight: 650; font-size: 12px; }
+    .difficulty-angle { color: #5f6368; font-size: 11px; margin-top: 2px; }
+
+    .difficulty-key {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      max-width: 420px;
+    }
+
+    .difficulty-key-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .difficulty-swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 1px solid rgba(0,0,0,.1);
+      flex: 0 0 auto;
+    }
+
+    .conventions-note {
+      margin: 12px 0 0;
+      color: #5f6368;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 760px) {
+      .convention-grid { grid-template-columns: 1fr; }
+      .difficulty-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .conventions-dialog { padding: 16px; }
+      .conventions-header { top: -16px; margin: -16px -16px 14px; padding: 14px 16px 10px; }
+    }
+
+    @media (max-width: 700px) {
+      #control-panel { max-height: 58vh; }
+      #legend-panel { max-height: 34vh; }
+      #legend-body { max-height: calc(34vh - 38px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <aside id="control-panel" class="map-panel" aria-label="Map controls">
+    <div id="control-panel-header" class="control-panel-header">
+      <div class="control-panel-heading">
+        <h1 class="panel-title">Map controls</h1>
+        <p class="panel-subtitle">Toggle map content and adjust transparency for analytical line layers.</p>
+      </div>
+      <button id="control-panel-close" class="panel-close-button" type="button" aria-label="Close layer controls" title="Close layer controls">×</button>
+    </div>
+
+    <div id="control-panel-content">
+      <div id="layer-controls"></div>
+      <button id="open-conventions" class="panel-action-button" type="button">Fixed color conventions ↗</button>
+    </div>
+  </aside>
+
+  <aside id="legend-panel" class="map-panel" aria-label="Map legend">
+    <div id="legend-header">
+      <span>Legend</span>
+      <span id="legend-toggle">−</span>
+    </div>
+    <div id="legend-body"></div>
+  </aside>
+
+  <div id="conventions-modal" class="conventions-modal" role="dialog" aria-modal="true" aria-labelledby="conventions-title" aria-hidden="true">
+    <div class="conventions-dialog">
+      <div class="conventions-header">
+        <h2 id="conventions-title" class="conventions-title">Fixed color conventions</h2>
+        <button id="close-conventions" class="conventions-close" type="button" aria-label="Close color conventions">×</button>
+      </div>
+
+      <section class="conventions-section">
+        <h3>Run Types</h3>
+        <div class="convention-grid">
+          <div class="convention-card"><span class="convention-line"></span><div><div class="convention-label">Downhill (groomed)</div><div class="convention-description">Standard piste</div></div></div>
+          <div class="convention-card"><span class="convention-line dashed"></span><div><div class="convention-label">Downhill (ungroomed)</div><div class="convention-description">Moguls, ungroomed, or backcountry</div></div></div>
+          <div class="convention-card"><span class="convention-line dotted"></span><div><div class="convention-label">Downhill (gladed)</div><div class="convention-description">Tree skiing</div></div></div>
+          <div class="convention-card"><span class="convention-line double"></span><div><div class="convention-label">Nordic (groomed)</div><div class="convention-description">Cross-country trail</div></div></div>
+          <div class="convention-card"><span class="convention-line double dashed"></span><div><div class="convention-label">Nordic (ungroomed)</div><div class="convention-description">Backcountry Nordic route</div></div></div>
+          <div class="convention-card"><span class="convention-line dashed"></span><div><div class="convention-label">Ski Tour</div><div class="convention-description">Backcountry skiing ascent route</div></div></div>
+          <div class="convention-card"><span class="convention-line snow"></span><div><div class="convention-label">Snowmaking</div><div class="convention-description">Snowfarming or artificial snow coverage</div></div></div>
+          <div class="convention-card"><span class="convention-line lit"></span><div><div class="convention-label">Lit Run</div><div class="convention-description">Night skiing</div></div></div>
+          <div class="convention-card"><span class="convention-line dashed"></span><div><div class="convention-label">Other</div><div class="convention-description">Hiking, sledding, or related routes</div></div></div>
+        </div>
+      </section>
+
+      <section class="conventions-section">
+        <h3>Lifts</h3>
+        <div class="convention-grid">
+          <div class="convention-card"><span class="convention-line lift"></span><div><div class="convention-label">Operating</div><div class="convention-description">Chairlift, gondola, drag lift, etc.</div></div></div>
+          <div class="convention-card"><span class="convention-line private"></span><div><div class="convention-label">Operating (Private)</div><div class="convention-description">Not available to the general public</div></div></div>
+          <div class="convention-card"><span class="convention-line non-operating"></span><div><div class="convention-label">Non-Operating</div><div class="convention-description">Planned, under construction, or abandoned</div></div></div>
+        </div>
+      </section>
+
+      <section class="conventions-section">
+        <h3>Run Difficulty</h3>
+        <div class="difficulty-tabs" role="tablist" aria-label="Difficulty region">
+          <button class="difficulty-tab is-active" type="button" data-region="europe" role="tab" aria-selected="true">Europe</button>
+          <button class="difficulty-tab" type="button" data-region="north-america" role="tab" aria-selected="false">North America</button>
+          <button class="difficulty-tab" type="button" data-region="japan" role="tab" aria-selected="false">Japan</button>
+        </div>
+
+        <div class="difficulty-panel is-active" data-region-panel="europe">
+          <div class="difficulty-key">
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#08ad1a"></span><span>Novice</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#1165ad"></span><span>Easy</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#ff1822"></span><span>Intermediate</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#000"></span><span>Advanced / Expert</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#ff8700"></span><span>Freeride / Extreme</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#666"></span><span>Unknown</span></div>
+          </div>
+          <div class="difficulty-box">
+            <strong>Downhill / Ski Tour Slope Grading</strong>
+            <div class="difficulty-list" style="margin-top:12px">
+              <div class="difficulty-item"><div class="difficulty-color" style="background:#666"></div><div class="difficulty-name">Flat</div><div class="difficulty-angle">&lt; 3°</div></div>
+              <div class="difficulty-item"><div class="difficulty-color" style="background:#08ad1a"></div><div class="difficulty-name">Easy</div><div class="difficulty-angle">3°–14°</div></div>
+              <div class="difficulty-item"><div class="difficulty-color" style="background:#1165ad"></div><div class="difficulty-name">Intermediate</div><div class="difficulty-angle">14°–22°</div></div>
+              <div class="difficulty-item"><div class="difficulty-color" style="background:#000"></div><div class="difficulty-name">Advanced / Expert</div><div class="difficulty-angle">22°–45°</div></div>
+              <div class="difficulty-item"><div class="difficulty-color" style="background:#ff8700"></div><div class="difficulty-name">Freeride / Extreme</div><div class="difficulty-angle">&gt; 45°</div></div>
+            </div>
+          </div>
+          <div class="difficulty-box">
+            <strong>Nordic Slope Grading</strong>
+            <div class="difficulty-list" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:12px">
+              <div class="difficulty-item"><div class="difficulty-color" style="background:#08ad1a"></div><div class="difficulty-name">Easy</div><div class="difficulty-angle">&lt; 6°</div></div>
+              <div class="difficulty-item"><div class="difficulty-color" style="background:#1165ad"></div><div class="difficulty-name">Intermediate</div><div class="difficulty-angle">6°–9°</div></div>
+              <div class="difficulty-item"><div class="difficulty-color" style="background:#000"></div><div class="difficulty-name">Advanced</div><div class="difficulty-angle">&gt; 9°</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="difficulty-panel" data-region-panel="north-america">
+          <div class="difficulty-key">
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#08ad1a"></span><span>Novice / Easy</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#1165ad"></span><span>Intermediate</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#000"></span><span>Advanced / Expert</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#ff8700"></span><span>Freeride / Extreme</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#666"></span><span>Unknown</span></div>
+          </div>
+          <p class="conventions-note">North American resorts commonly combine beginner and easy runs under green, use blue for intermediate terrain, and black for advanced/expert terrain.</p>
+        </div>
+
+        <div class="difficulty-panel" data-region-panel="japan">
+          <div class="difficulty-key">
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#08ad1a"></span><span>Beginner</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#ff1822"></span><span>Intermediate</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#000"></span><span>Advanced</span></div>
+            <div class="difficulty-key-row"><span class="difficulty-swatch" style="background:#666"></span><span>Unknown</span></div>
+          </div>
+          <p class="conventions-note">Japanese resort conventions typically use green for beginner, red for intermediate, and black for advanced runs.</p>
+        </div>
+
+        <p class="conventions-note">Slope angle may be used to estimate difficulty for elevation profiles and slope overlays. Elevation-profile slope is measured along the route; slope-overlay values are measured along the fall line.</p>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    maptilersdk.config.apiKey = 'XGMBkywGOCmPQIjVuE1X';
+
+    // The style initially references one DEM source for both terrain and
+    // hillshade. The sources are separated as soon as the style loads below.
+    // Suppress only MapLibre's transient warning; all other warnings remain.
+    const nativeConsoleWarn = console.warn.bind(console);
+    console.warn = (...args) => {
+      const message = args.map(value => String(value)).join(' ');
+      if (message.includes('same source for a hillshade layer and for 3D terrain')) return;
+      nativeConsoleWarn(...args);
+    };
+
+    const map = new maptilersdk.Map({
+      container: 'map',
+      style: '019f138f-779e-78fa-9899-5db087d490b8',
+      center: [12.77667, 47.32727],
+      zoom: 12.3
+    });
+
+    const controls = [
+      { id: 'resort-runs', section: 'Ski Resort', label: 'Runs', kind: 'style', keywords: ['piste', 'ski', 'run'], layerTypes: ['line', 'fill'], searchFilter: true, legend: 'line', color: '#7c3aed', defaultOpacity: 1 },
+      { id: 'resort-pois', section: 'Ski Resort', label: 'POIs', kind: 'style', keywords: ['poi', 'peak', 'summit'], layerTypes: ['symbol', 'circle'], searchFilter: true, legend: 'dot', color: '#8b5e3c', defaultOpacity: 1 },
+      { id: 'resort-lifts', section: 'Ski Resort', label: 'Lifts', kind: 'style', keywords: ['aerialway', 'lift', 'gondola', 'chairlift', 'cable_car'], searchFilter: true, legend: 'line', color: '#222222', defaultOpacity: 1 },
+      { id: 'base-contours', section: 'Basemaps', label: 'Contour', kind: 'style', keywords: ['contour'], legend: 'line', color: '#9a7b57', defaultOpacity: 1 },
+      { id: 'base-hillshade', section: 'Basemaps', label: 'Hillshade', kind: 'style', keywords: ['hillshade'], legend: 'dot', color: '#b0b5bd', defaultOpacity: 1 },
+      { id: 'data-technique', section: 'Layers', label: 'Technique', kind: 'custom', layerIds: ['technique-layer'], legend: 'categories', categoryProperty: '__technique', defaultOpacity: 0.85, defaultVisible: true },
+      { id: 'data-speed', section: 'Layers', label: 'Speed', kind: 'custom', layerIds: ['speed-layer'], legend: 'speed', defaultOpacity: 0.85, defaultVisible: false },
+      { id: 'data-falls', section: 'Layers', label: 'Falls', kind: 'custom', layerIds: ['falls-layer'], legend: 'fall', defaultOpacity: 0.95, defaultVisible: false },
+      { id: 'data-edge', section: 'Layers', label: 'Edging', kind: 'custom', layerIds: ['edge-layer'], legend: 'continuous', legendTitle: 'Edging angle (°)', legendStops: [[0,'#2c7bb6'],[20,'#abd9e9'],[35,'#ffffbf'],[50,'#fdae61'],[65,'#d7191c']], defaultOpacity: 0.85, defaultVisible: false }
+    ];
+
+    const state = {
+      originalPoints: { type: 'FeatureCollection', features: [] },
+      filteredPoints: { type: 'FeatureCollection', features: [] },
+      categoryColors: {},
+      controlState: {},
+      dataLoaded: false
+    };
+
+
+    const poiLegendFeatureIndex = new Map();
+    let poiLegendItemCounter = 0;
+    let poiHighlightAnimationFrame = null;
+    let poiHighlightClearTimer = null;
+    const spriteAlphaMaskCache = new Map();
+    let legendCanvasSnapshot = null;
+    let poiHighlightAnimating = false;
+    let poiHighlightMarkers = [];
+
+    const palette = ['#3366cc', '#dc3912', '#ff9900', '#109618', '#990099', '#0099c6', '#dd4477', '#66aa00'];
+    controls.forEach(control => {
+      state.controlState[control.id] = {
+        visible: control.defaultVisible !== false,
+        opacity: control.defaultOpacity ?? 1,
+        available: true,
+        layerIds: []
+      };
+    });
+
+    function findLayersByKeywords(keywords, options = {}) {
+      const layers = map.getStyle()?.layers || [];
+      const normalizedKeywords = keywords.map(keyword => String(keyword).toLowerCase());
+
+      return [...new Set(layers.filter(layer => {
+        if (options.layerTypes?.length && !options.layerTypes.includes(layer.type)) return false;
+
+        const searchableParts = [
+          String(layer.id || ''),
+          String(layer['source-layer'] || '')
+        ];
+
+        // Ski-run styling is often identified in a Mapbox/MapTiler filter
+        // rather than in the layer ID or source-layer name.
+        if (options.searchFilter && layer.filter) {
+          searchableParts.push(JSON.stringify(layer.filter));
+        }
+
+        const searchableText = searchableParts.join(' ').toLowerCase();
+        return normalizedKeywords.some(keyword => searchableText.includes(keyword));
+      }).map(layer => layer.id))];
+    }
+
+    function paintOpacityProperties(layer) {
+      if (!layer) return [];
+      switch (layer.type) {
+        case 'line': return ['line-opacity'];
+        case 'fill': return ['fill-opacity'];
+        case 'circle': return ['circle-opacity', 'circle-stroke-opacity'];
+        case 'symbol': return ['icon-opacity', 'text-opacity'];
+        case 'raster': return ['raster-opacity'];
+        case 'heatmap': return ['heatmap-opacity'];
+        case 'fill-extrusion': return ['fill-extrusion-opacity'];
+        case 'hillshade': return ['hillshade-exaggeration'];
+        default: return [];
+      }
+    }
+
+    function setLayersVisibility(layerIds, visible) {
+      layerIds.forEach(layerId => {
+        if (map.getLayer(layerId)) {
+          map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
+        }
+      });
+    }
+
+    function setLayersOpacity(layerIds, opacity) {
+      layerIds.forEach(layerId => {
+        const layer = map.getLayer(layerId);
+        if (!layer) return;
+        paintOpacityProperties(layer).forEach(property => {
+          try {
+            map.setPaintProperty(layerId, property, opacity);
+          } catch (error) {
+            console.debug(`Opacity property ${property} is not supported by ${layerId}.`, error);
+          }
+        });
+      });
+    }
+
+    function resolveControlLayers(control) {
+      if (control.id === 'resort-pois') return discoverPoiLayerIds(false);
+      if (control.id === 'resort-lifts') return discoverLiftLayerIds();
+      return control.kind === 'style'
+        ? findLayersByKeywords(control.keywords, { layerTypes: control.layerTypes, searchFilter: control.searchFilter })
+        : control.layerIds.filter(layerId => map.getLayer(layerId));
+    }
+
+    function syncControl(control) {
+      const controlState = state.controlState[control.id];
+      controlState.layerIds = resolveControlLayers(control);
+      controlState.available = control.id === 'resort-pois'
+        ? (discoverPoiLayerIds(false).length > 0 || renderedPointFeatureEntries().some(entryIsPoi))
+        : controlState.layerIds.length > 0;
+      if (!controlState.available) return;
+      setLayersVisibility(controlState.layerIds, controlState.visible);
+      if (control.kind === 'custom') {
+        setLayersOpacity(controlState.layerIds, controlState.opacity);
+      }
+    }
+
+    function renderLayerControls() {
+      const container = document.getElementById('layer-controls');
+      container.innerHTML = '';
+      const sections = ['Ski Resort', 'Basemaps', 'Layers'];
+
+      sections.forEach(sectionName => {
+        const details = document.createElement('details');
+        details.className = 'control-group';
+        details.open = true;
+
+        const summary = document.createElement('summary');
+        const summaryMain = document.createElement('span');
+        summaryMain.className = 'group-summary-main';
+
+        const summaryTitle = document.createElement('span');
+        summaryTitle.className = 'group-summary-title';
+        summaryTitle.textContent = sectionName;
+        summaryMain.appendChild(summaryTitle);
+
+        // Place the fixed conventions control directly beside the Ski Resort title.
+        // Reusing the existing button preserves its modal event listeners even when
+        // the layer-control DOM is rebuilt.
+        if (sectionName === 'Ski Resort') {
+          const conventionsButton = document.getElementById('open-conventions');
+          if (conventionsButton) summaryMain.appendChild(conventionsButton);
+        }
+
+        summary.appendChild(summaryMain);
+        details.appendChild(summary);
+
+        controls.filter(control => control.section === sectionName).forEach(control => {
+          syncControl(control);
+          const controlState = state.controlState[control.id];
+
+          const row = document.createElement('div');
+          row.className = `layer-row${control.kind === 'style' ? ' visibility-only' : ''}${controlState.available ? '' : ' unavailable'}`;
+
+          const label = document.createElement('label');
+          label.className = 'layer-toggle';
+          label.title = controlState.available ? control.label : `${control.label} is not available in the current style or dataset.`;
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = controlState.visible;
+          checkbox.disabled = !controlState.available;
+          checkbox.addEventListener('change', () => {
+            controlState.visible = checkbox.checked;
+            setLayersVisibility(controlState.layerIds, checkbox.checked);
+            requestLegendBuild({ force: true, delay: 0 });
+          });
+
+          const labelText = document.createElement('span');
+          labelText.textContent = control.label;
+          label.append(checkbox, labelText);
+          row.appendChild(label);
+
+          // Transparency is intentionally limited to the four analytical map layers.
+          if (control.kind === 'custom') {
+            const slider = document.createElement('input');
+            slider.className = 'opacity-slider';
+            slider.type = 'range';
+            slider.min = '0';
+            slider.max = '1';
+            slider.step = '0.05';
+            slider.value = String(controlState.opacity);
+            slider.disabled = !controlState.available;
+            slider.setAttribute('aria-label', `${control.label} opacity`);
+
+            const value = document.createElement('span');
+            value.className = 'opacity-value';
+            value.textContent = `${Math.round(controlState.opacity * 100)}%`;
+
+            slider.addEventListener('input', () => {
+              controlState.opacity = Number(slider.value);
+              value.textContent = `${Math.round(controlState.opacity * 100)}%`;
+              setLayersOpacity(controlState.layerIds, controlState.opacity);
+            });
+
+            row.append(slider, value);
+          }
+
+          details.appendChild(row);
+        });
+
+        container.appendChild(details);
+      });
+
+      requestLegendBuild({ force: true, delay: 0 });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function firstProperty(properties, candidates) {
+      for (const key of candidates) {
+        const value = properties?.[key];
+        if (value !== null && value !== undefined && value !== '') return value;
+      }
+      return null;
+    }
+
+    function normalizeDate(value) {
+      if (value === null || value === undefined || value === '') return 'Unknown date';
+      const text = String(value).trim();
+      const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (isoMatch) return isoMatch[1];
+      const date = new Date(text);
+      return Number.isNaN(date.getTime()) ? text : date.toISOString().slice(0, 10);
+    }
+
+    function toBoolean(value) {
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'number') return value > 0;
+      const text = String(value ?? '').trim().toLowerCase();
+      return ['true', 'yes', '1', 'fall', 'fallen', 'detected'].includes(text) || text.includes('fall');
+    }
+
+    function normalizeTechnique(value) {
+      const text = String(value ?? '').trim();
+      if (!text) return 'Unknown';
+      if (/carv/i.test(text)) return 'Carving';
+      if (/drift/i.test(text)) return 'Drifted turns';
+      if (/snow|plow/i.test(text)) return 'Snowplow steered';
+      if (/parallel/i.test(text)) return 'Parallel turns';
+      if (/glid/i.test(text)) return 'Gliding';
+      return text;
+    }
+
+    function accelerationMagnitude(properties, prefix) {
+      const x = Number(properties?.[`${prefix}_x`]);
+      const y = Number(properties?.[`${prefix}_y`]);
+      const z = Number(properties?.[`${prefix}_z`]);
+      if (![x, y, z].some(Number.isFinite)) return null;
+      return Math.sqrt((Number.isFinite(x) ? x : 0) ** 2 + (Number.isFinite(y) ? y : 0) ** 2 + (Number.isFinite(z) ? z : 0) ** 2);
+    }
+
+    function normalizePoints(input) {
+      // The standalone map starts with GeoJSON, while the dashboard sends the
+      // same plain point array used by Overview and Run Analysis.
+      const sourceFeatures = Array.isArray(input)
+        ? input.map(point => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [Number(point?.lon), Number(point?.lat)] },
+            properties: { ...(point || {}) }
+          }))
+        : (Array.isArray(input?.features) ? input.features : []);
+
+      const normalized = sourceFeatures
+        .filter(feature => {
+          if (feature?.geometry?.type !== 'Point' || !Array.isArray(feature.geometry.coordinates)) return false;
+          const [lon, lat] = feature.geometry.coordinates.map(Number);
+          return Number.isFinite(lon) && Number.isFinite(lat) && lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90;
+        })
+        .map((feature, index) => {
+          const properties = { ...(feature.properties || {}) };
+          const rawDate = firstProperty(properties, ['date', 'recording_date', 'phone_time', 'timestamp', 'datetime', 'time']);
+          const rawRun = firstProperty(properties, ['run', 'run_id', 'runId', 'run_number', 'runNumber', 'trajectory_id', 'trajectory', 'track_id', 'session', 'source_file', 'file_name', 'file']);
+          const rawSpeed = firstProperty(properties, ['speed', 'velocity', 'speed_ms', 'speed_m_s']);
+          const rawTechnique = firstProperty(properties, ['analytics_technique', 'technique', 'skiing_technique', 'turn_technique', 'technique_label', 'movement_class']);
+          const rawFall = firstProperty(properties, ['fall_candidate', 'fall_detected', 'fall', 'falls', 'is_fall', 'event']);
+          const rawEdge = firstProperty(properties, ['effective_edging_angle', 'analytics_effective_edging_deg', 'analytics_edge_angle', 'edge_angle', 'edgeAngle', 'edging', 'edge']);
+          const rawGForce = firstProperty(properties, ['turn_g_force', 'g_force', 'gForce', 'analytics_avg_g_force', 'analytics_max_g_force']);
+          const rawCarving = firstProperty(properties, ['turn_carving_score', 'carving_score', 'carvingScore', 'analytics_carving_score']);
+          const rawSlope = firstProperty(properties, ['slope_class', 'slope', 'difficulty', 'steepness_class']);
+          const rawService = firstProperty(properties, ['service_status', 'service_intensity', 'edge_condition']);
+
+          const leftImpact = accelerationMagnitude(properties, 'left_acc');
+          const rightImpact = accelerationMagnitude(properties, 'right_acc');
+          const derivedFall = Math.max(leftImpact ?? 0, rightImpact ?? 0) > 36;
+
+          properties.__filterDate = normalizeDate(rawDate);
+          properties.__filterRun = String(rawRun ?? 'Run 1');
+          properties.__speed = Number.isFinite(Number(rawSpeed)) ? Number(rawSpeed) : 0;
+          properties.__technique = normalizeTechnique(rawTechnique);
+          properties.__fall = rawFall !== null ? toBoolean(rawFall) : derivedFall;
+          properties.__fallConfidence = Number.isFinite(Number(properties.fall_confidence)) ? Number(properties.fall_confidence) : (properties.__fall ? 1 : 0);
+          properties.__fallStatus = String(properties.fall_status || (properties.__fall ? 'likely' : 'none'));
+          properties.__fallSource = String(properties.fall_source || (rawFall !== null ? 'explicit data flag' : 'impact-only fallback'));
+          properties.__edge = Number.isFinite(Number(rawEdge)) ? Number(rawEdge) : null;
+          properties.__gforce = Number.isFinite(Number(rawGForce)) ? Number(rawGForce) : null;
+          properties.__carving = Number.isFinite(Number(rawCarving)) ? Number(rawCarving) : null;
+          properties.__slope = String(rawSlope ?? 'No JSON match');
+          properties.__service = String(rawService ?? 'Unknown');
+          properties.__rawTime = firstProperty(properties, ['phone_time', 'timestamp', 'datetime', 'time']) || '';
+          properties.__timeMs = parseSortableTime({ time: properties.__rawTime });
+          const rawAltitude = firstProperty(properties, ['alt', 'altitude', 'elevation']);
+          properties.__altitude = Number.isFinite(Number(rawAltitude)) ? Number(rawAltitude) : null;
+          properties.__originalIndex = index;
+
+          return { ...feature, properties };
+        });
+
+      return { type: 'FeatureCollection', features: normalized };
+    }
+
+    function uniqueSorted(values) {
+      return [...new Set(values)].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+    }
+
+    const MIN_SEGMENT_DISTANCE_LIMIT_M = 150;
+    const MAX_SEGMENT_DISTANCE_LIMIT_M = 500;
+    const MAX_SEGMENT_TIME_GAP_MS = 30_000;
+
+    function parseSortableTime(properties) {
+      const raw = firstProperty(properties, ['phone_time', 'timestamp', 'datetime', 'time']);
+      if (raw === null || raw === undefined || raw === '') return null;
+
+      if (typeof raw === 'number' && Number.isFinite(raw)) {
+        // Support both Unix seconds and Unix milliseconds.
+        return raw < 10_000_000_000 ? raw * 1000 : raw;
+      }
+
+      const text = String(raw).trim();
+      const directDate = new Date(text);
+      if (!Number.isNaN(directDate.getTime())) return directDate.getTime();
+
+      // A time-only value such as 09:44:23.250 is anchored to an arbitrary date
+      // so it can still be used to order samples and detect recording gaps.
+      const timeOnly = text.match(/^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d+))?$/);
+      if (timeOnly) {
+        const [, hours, minutes, seconds, fraction = '0'] = timeOnly;
+        const milliseconds = Number(`0.${fraction}`) * 1000;
+        return ((Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)) * 1000) + milliseconds;
+      }
+
+      return null;
+    }
+
+    function sortRunGroup(group) {
+      group.sort((a, b) => {
+        const timeA = a.properties.__timeMs;
+        const timeB = b.properties.__timeMs;
+        if (Number.isFinite(timeA) && Number.isFinite(timeB) && timeA !== timeB) return timeA - timeB;
+        return a.properties.__originalIndex - b.properties.__originalIndex;
+      });
+      return group;
+    }
+
+    function haversineDistanceMeters(startCoords, endCoords) {
+      const toRadians = degrees => degrees * Math.PI / 180;
+      const [lon1, lat1] = startCoords;
+      const [lon2, lat2] = endCoords;
+      const earthRadius = 6_371_008.8;
+      const deltaLat = toRadians(lat2 - lat1);
+      const deltaLon = toRadians(lon2 - lon1);
+      const a = Math.sin(deltaLat / 2) ** 2
+        + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(deltaLon / 2) ** 2;
+      return 2 * earthRadius * Math.asin(Math.min(1, Math.sqrt(a)));
+    }
+
+    function median(values) {
+      if (!values.length) return 0;
+      const sorted = [...values].sort((a, b) => a - b);
+      const middle = Math.floor(sorted.length / 2);
+      return sorted.length % 2
+        ? sorted[middle]
+        : (sorted[middle - 1] + sorted[middle]) / 2;
+    }
+
+    function makeSegmentCollection(pointFeatures) {
+      const groups = new Map();
+      pointFeatures.forEach(feature => {
+        const key = `${feature.properties.__filterDate}|||${feature.properties.__filterRun}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(feature);
+      });
+
+      const features = [];
+      groups.forEach(group => {
+        sortRunGroup(group);
+
+        // Derive a run-specific spatial gap threshold. This prevents unrelated
+        // clusters from being joined by long diagonal lines while still allowing
+        // naturally sparse GPS trajectories to render continuously.
+        const adjacentDistances = [];
+        for (let index = 0; index < group.length - 1; index += 1) {
+          const startCoords = group[index].geometry?.coordinates;
+          const endCoords = group[index + 1].geometry?.coordinates;
+          if (!Array.isArray(startCoords) || !Array.isArray(endCoords)) continue;
+          const distance = haversineDistanceMeters(startCoords, endCoords);
+          if (Number.isFinite(distance) && distance > 0) adjacentDistances.push(distance);
+        }
+        const typicalDistance = median(adjacentDistances);
+        const distanceLimit = Math.min(
+          MAX_SEGMENT_DISTANCE_LIMIT_M,
+          Math.max(MIN_SEGMENT_DISTANCE_LIMIT_M, typicalDistance * 12)
+        );
+
+        for (let index = 0; index < group.length - 1; index += 1) {
+          const start = group[index];
+          const end = group[index + 1];
+          const startCoords = start.geometry?.coordinates;
+          const endCoords = end.geometry?.coordinates;
+          if (!Array.isArray(startCoords) || !Array.isArray(endCoords)) continue;
+          if (startCoords.length < 2 || endCoords.length < 2) continue;
+
+          const distanceMeters = haversineDistanceMeters(startCoords, endCoords);
+          if (!Number.isFinite(distanceMeters) || distanceMeters <= 0 || distanceMeters > distanceLimit) continue;
+
+          const startTimeMs = start.properties.__timeMs;
+          const endTimeMs = end.properties.__timeMs;
+          const timeGapMs = Number.isFinite(startTimeMs) && Number.isFinite(endTimeMs)
+            ? Math.abs(endTimeMs - startTimeMs)
+            : null;
+          if (timeGapMs !== null && timeGapMs > MAX_SEGMENT_TIME_GAP_MS) continue;
+
+          const startSpeed = Number(start.properties.__speed);
+          const endSpeed = Number(end.properties.__speed);
+          const segmentSpeed = Number.isFinite(startSpeed) && Number.isFinite(endSpeed)
+            ? (startSpeed + endSpeed) / 2
+            : (Number.isFinite(startSpeed) ? startSpeed : (Number.isFinite(endSpeed) ? endSpeed : 0));
+
+          const technique = start.properties.__technique !== 'Unknown'
+            ? start.properties.__technique
+            : end.properties.__technique;
+          const numericMean = (left, right) => {
+            const values = [Number(left), Number(right)].filter(Number.isFinite);
+            return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+          };
+          const edge = numericMean(start.properties.__edge, end.properties.__edge);
+          const gforce = numericMean(start.properties.__gforce, end.properties.__gforce);
+          const carving = numericMean(start.properties.__carving, end.properties.__carving);
+          const slope = start.properties.__slope !== 'No JSON match' ? start.properties.__slope : end.properties.__slope;
+          const service = start.properties.__service !== 'Unknown' ? start.properties.__service : end.properties.__service;
+          const altitude = numericMean(start.properties.__altitude, end.properties.__altitude);
+
+          features.push({
+            type: 'Feature',
+            properties: {
+              __filterDate: start.properties.__filterDate,
+              __filterRun: start.properties.__filterRun,
+              __speed: segmentSpeed,
+              __technique: technique,
+              __edge: edge,
+              __gforce: gforce,
+              __carving: carving,
+              __slope: slope,
+              __service: service,
+              __fall: Boolean(start.properties.__fall || end.properties.__fall),
+              __altitude: altitude,
+              __segmentStartTime: start.properties.__rawTime,
+              __segmentEndTime: end.properties.__rawTime,
+              __segmentDistanceM: distanceMeters,
+              __segmentDurationS: timeGapMs === null ? null : timeGapMs / 1000
+            },
+            geometry: {
+              type: 'LineString',
+              coordinates: [startCoords, endCoords]
+            }
+          });
+        }
+      });
+
+      return { type: 'FeatureCollection', features };
+    }
+
+    function assignCategoryColors(propertyName) {
+      const values = uniqueSorted(state.originalPoints.features.map(feature => feature.properties[propertyName]));
+      const colorMap = {};
+      values.forEach((value, index) => { colorMap[value] = palette[index % palette.length]; });
+      state.categoryColors[propertyName] = colorMap;
+      return colorMap;
+    }
+
+    function categoryExpression(propertyName) {
+      const colorMap = state.categoryColors[propertyName] || assignCategoryColors(propertyName);
+      const expression = ['match', ['get', propertyName]];
+      Object.entries(colorMap).forEach(([value, color]) => expression.push(value, color));
+      expression.push('#94a3b8');
+      return expression;
+    }
+
+    function addTrajectoryLayers(points) {
+      state.originalPoints = normalizePoints(points);
+      state.filteredPoints = state.originalPoints;
+      state.dataLoaded = true;
+
+      assignCategoryColors('__technique');
+      assignCategoryColors('__slope');
+      assignCategoryColors('__service');
+
+      const initialSegments = makeSegmentCollection(state.originalPoints.features);
+      // The analytical source contains short two-vertex LineStrings, not point features.
+      // Each segment retains the attributes needed for speed, technique, fall and edge styling.
+      map.addSource('track-segments', { type: 'geojson', data: initialSegments });
+      map.addSource('track-points', { type: 'geojson', data: state.originalPoints });
+
+      map.addLayer({
+        id: 'speed-layer',
+        type: 'line',
+        source: 'track-segments',
+        layout: {
+          visibility: 'none',
+          'line-cap': 'round',
+          'line-join': 'round'
+        },
+        paint: {
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 13, 3.5, 16, 6],
+          'line-color': [
+            'interpolate', ['linear'], ['get', '__speed'],
+            0, '#2c7bb6',
+            3, '#abd9e9',
+            6, '#ffffbf',
+            9, '#fdae61',
+            13, '#d7191c'
+          ],
+          'line-opacity': 0.85
+        }
+      });
+
+      map.addLayer({
+        id: 'technique-layer',
+        type: 'line',
+        source: 'track-segments',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round'
+        },
+        paint: {
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.8, 13, 4, 16, 6.5],
+          'line-color': categoryExpression('__technique'),
+          'line-opacity': 0.85
+        }
+      });
+
+      map.addLayer({
+        id: 'edge-layer', type: 'line', source: 'track-segments',
+        layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.8, 13, 4, 16, 6.5],
+          'line-color': ['interpolate', ['linear'], ['coalesce', ['get', '__edge'], 0], 0,'#2c7bb6',20,'#abd9e9',35,'#ffffbf',50,'#fdae61',65,'#d7191c'],
+          'line-opacity': 0.85
+        }
+      });
+
+      map.addLayer({
+        id: 'falls-layer',
+        type: 'circle',
+        source: 'track-points',
+        filter: ['==', ['get', '__fall'], true],
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 9],
+          'circle-color': ['case', ['==', ['get', '__fallStatus'], 'likely'], '#d7191c', '#f59e0b'],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.96
+        }
+      });
+
+      requestLegendBuild({ force: true, delay: 0 });
+
+      const bounds = new maptilersdk.LngLatBounds();
+      state.originalPoints.features.forEach(feature => bounds.extend(feature.geometry.coordinates));
+      if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 120, duration: 0 });
+
+      ['technique-layer', 'speed-layer', 'falls-layer', 'edge-layer'].forEach(layerId => {
+        map.on('click', layerId, event => {
+          const feature = event.features?.[0];
+          if (!feature) return;
+          const p = feature.properties || {};
+          const startTime = p.__segmentStartTime || firstProperty(p, ['phone_time', 'timestamp', 'datetime', 'time']);
+          const endTime = p.__segmentEndTime || '';
+          const speed = Number(firstProperty(p, ['speed', 'velocity', '__speed']));
+          const altitude = Number(firstProperty(p, ['__altitude', 'alt', 'altitude', 'elevation']));
+          const segmentDistance = Number(p.__segmentDistanceM);
+          const segmentDuration = Number(p.__segmentDurationS);
+          const rows = [
+            `<strong>Trajectory segment</strong>`,
+            startTime ? `Start: ${escapeHtml(startTime)}` : null,
+            endTime ? `End: ${escapeHtml(endTime)}` : null,
+            `Date: ${escapeHtml(p.__filterDate)}`,
+            `Run: ${escapeHtml(p.__filterRun)}`,
+            Number.isFinite(speed) ? `Speed: ${speed.toFixed(2)} m/s` : null,
+            Number.isFinite(altitude) ? `Altitude: ${altitude.toFixed(1)} m` : null,
+            Number.isFinite(segmentDistance) ? `Segment: ${segmentDistance.toFixed(1)} m` : null,
+            Number.isFinite(segmentDuration) ? `Duration: ${segmentDuration.toFixed(2)} s` : null,
+            `Technique: ${escapeHtml(p.__technique)}`,
+            p.__fall ? `Fall candidate: ${escapeHtml(p.__fallStatus || 'possible')}` : 'Fall candidate: No',
+            p.__fall ? `Confidence: ${(Number(p.__fallConfidence || 0) * 100).toFixed(0)}%` : null,
+            p.__fall ? `Source: ${escapeHtml(p.__fallSource || 'multi-signal heuristic')}` : null,
+            Number.isFinite(Number(p.__edge)) ? `Effective edging: ${Number(p.__edge).toFixed(1)}°` : null,
+            Number.isFinite(Number(p.__gforce)) ? `G-force: ${Number(p.__gforce).toFixed(2)} g` : null,
+            Number.isFinite(Number(p.__carving)) ? `Carving score: ${Number(p.__carving).toFixed(2)}` : null,
+            `Slope: ${escapeHtml(p.__slope)}`,
+            `Service: ${escapeHtml(p.__service)}`
+          ].filter(Boolean);
+
+          new maptilersdk.Popup()
+            .setLngLat(event.lngLat)
+            .setHTML(rows.join('<br>'))
+            .addTo(map);
+        });
+        map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
+      });
+    }
+
+    let lastTrajectorySignature = '';
+    let trajectoryUpdateTimer = null;
+    function trajectorySignature(points) {
+      const list = points || [];
+      if (!list.length) return '0';
+      const first = list[0] || {};
+      const last = list[list.length - 1] || {};
+      return [list.length, first.lon, first.lat, last.lon, last.lat, first.phone_time || first.timestamp || '', last.phone_time || last.timestamp || ''].join('|');
+    }
+
+    function updateTrajectoryLayers(points, options = {}) {
+      const signature = trajectorySignature(points);
+      const isSameDataset = signature === lastTrajectorySignature;
+      lastTrajectorySignature = signature;
+      const normalized = normalizePoints(points);
+      if (!normalized.features.length) return false;
+      state.originalPoints = normalized;
+      state.filteredPoints = normalized;
+      state.dataLoaded = true;
+      assignCategoryColors('__technique');
+      assignCategoryColors('__slope');
+      assignCategoryColors('__service');
+      const source = map.getSource('track-segments');
+      if (!source) return false;
+      source.setData(makeSegmentCollection(normalized.features));
+      const pointSource = map.getSource('track-points');
+      if (pointSource) pointSource.setData(normalized);
+      if (map.getLayer('technique-layer')) map.setPaintProperty('technique-layer', 'line-color', categoryExpression('__technique'));
+      renderLayerControls();
+      requestLegendBuild({ force: true, delay: 0 });
+      if (options.fit !== false) {
+        const bounds = new maptilersdk.LngLatBounds();
+        normalized.features.forEach(feature => bounds.extend(feature.geometry.coordinates));
+        if (!bounds.isEmpty() && !isSameDataset) {
+          map.stop();
+          map.fitBounds(bounds, { padding: 90, duration: 0 });
+        }
+      }
+      return true;
+    }
+
+    window.addEventListener('message', event => {
+      if (event.source !== window.parent) return;
+      const message = event.data || {};
+      if (message.type === 'SKI_MAP_SELECT_LAYER') {
+        const modeToLayer = {technique:'technique-layer', speed:'speed-layer', falls:'falls-layer', edge:'edge-layer'};
+        const selectedLayer = modeToLayer[message.mode];
+        if (!selectedLayer) return;
+        controls.filter(control => control.kind === 'custom').forEach(control => {
+          const visible = control.layerIds.includes(selectedLayer);
+          state.controlState[control.id].visible = visible;
+          setLayersVisibility(resolveControlLayers(control), visible);
+        });
+        renderLayerControls();
+        return;
+      }
+      if (message.type !== 'SKI_DASHBOARD_ANALYTICS_DATA' || !Array.isArray(message.points)) return;
+      if (map.loaded() && map.getSource('track-segments')) {
+        clearTimeout(trajectoryUpdateTimer);
+        trajectoryUpdateTimer = setTimeout(() => updateTrajectoryLayers(message.points, { fit: message.fit !== false }), 40);
+      } else state.pendingDashboardPoints = message.points;
+    });
+
+    function addStyleLayerPopups() {
+      controls.filter(control => control.kind === 'style' && control.section === 'Ski Resort').forEach(control => {
+        resolveControlLayers(control).forEach(layerId => {
+          if (!map.getLayer(layerId)) return;
+          map.on('click', layerId, event => {
+            const feature = event.features?.[0];
+            if (!feature) return;
+            const rows = Object.entries(feature.properties || {})
+              .filter(([, value]) => value !== null && value !== undefined && value !== '')
+              .slice(0, 16)
+              .map(([key, value]) => `<strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)}`)
+              .join('<br>');
+            new maptilersdk.Popup()
+              .setLngLat(event.lngLat)
+              .setHTML(rows || '<em>No details available</em>')
+              .addTo(map);
+          });
+          map.on('mouseenter', layerId, () => { map.getCanvas().style.cursor = 'pointer'; });
+          map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
+        });
+      });
+    }
+
+    // ---- Dynamic legend for style layers, based on the current map BBOX ----
+    let spritePromise = null;
+
+    async function loadSprite() {
+      if (spritePromise) return spritePromise;
+      spritePromise = (async () => {
+        const spriteEntry = map.getStyle()?.sprite;
+        if (!spriteEntry) return null;
+        const baseUrl = typeof spriteEntry === 'string' ? spriteEntry : spriteEntry?.[0]?.url;
+        if (!baseUrl) return null;
+        const suffix = window.devicePixelRatio > 1 ? '@2x' : '';
+        try {
+          const [json, image] = await Promise.all([
+            fetch(`${baseUrl}${suffix}.json`).then(response => response.json()),
+            new Promise((resolve, reject) => {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.onload = () => resolve(img);
+              img.onerror = reject;
+              img.src = `${baseUrl}${suffix}.png`;
+            })
+          ]);
+          return { json, image };
+        } catch (error) {
+          console.warn('Could not load map sprite for the responsive legend.', error);
+          return null;
+        }
+      })();
+      return spritePromise;
+    }
+
+    function cropIconDataUrl(sprite, name) {
+      const meta = sprite?.json?.[name];
+      if (!meta) return null;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = meta.width;
+        canvas.height = meta.height;
+        const context = canvas.getContext('2d');
+        if (!context) return null;
+        context.drawImage(
+          sprite.image,
+          meta.x, meta.y, meta.width, meta.height,
+          0, 0, meta.width, meta.height
+        );
+        return canvas.toDataURL();
+      } catch (error) {
+        console.debug(`Could not crop sprite icon ${name}.`, error);
+        return null;
+      }
+    }
+
+
+    // Produce a crisp white-icon mask from the raster sprite. The source sprite
+    // includes semi-transparent antialiasing/shadow pixels; when used directly
+    // as a CSS mask those pixels become a fuzzy white halo in the legend.
+    function cropCrispIconMaskDataUrl(sprite, name) {
+      const meta = sprite?.json?.[name];
+      if (!meta) return null;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = meta.width;
+        canvas.height = meta.height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return null;
+        context.imageSmoothingEnabled = false;
+        context.drawImage(
+          sprite.image,
+          meta.x, meta.y, meta.width, meta.height,
+          0, 0, meta.width, meta.height
+        );
+
+        const imageData = context.getImageData(0, 0, meta.width, meta.height);
+        const pixels = imageData.data;
+        for (let index = 0; index < pixels.length; index += 4) {
+          const alpha = pixels[index + 3];
+          pixels[index] = 255;
+          pixels[index + 1] = 255;
+          pixels[index + 2] = 255;
+          // Remove low-opacity halo pixels and normalize the retained silhouette.
+          pixels[index + 3] = alpha >= 145 ? 255 : 0;
+        }
+        context.putImageData(imageData, 0, 0);
+        return canvas.toDataURL('image/png');
+      } catch (error) {
+        console.debug(`Could not create crisp POI mask for ${name}.`, error);
+        return cropIconDataUrl(sprite, name);
+      }
+    }
+
+
+
+    const spriteColorCache = new Map();
+
+    function spriteIconBackgroundColor(sprite, iconName) {
+      if (!sprite || !iconName) return null;
+      const cacheKey = `${iconName}`;
+      if (spriteColorCache.has(cacheKey)) return spriteColorCache.get(cacheKey);
+      const meta = sprite.json?.[iconName];
+      if (!meta) {
+        spriteColorCache.set(cacheKey, null);
+        return null;
+      }
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = meta.width;
+        canvas.height = meta.height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return null;
+        context.drawImage(sprite.image, meta.x, meta.y, meta.width, meta.height, 0, 0, meta.width, meta.height);
+        const pixels = context.getImageData(0, 0, meta.width, meta.height).data;
+        const bins = new Map();
+        for (let index = 0; index < pixels.length; index += 4) {
+          const alpha = pixels[index + 3];
+          if (alpha < 100) continue;
+          const r = pixels[index];
+          const g = pixels[index + 1];
+          const b = pixels[index + 2];
+          const { saturation, lightness } = rgbToHsl(r, g, b);
+          if (lightness > 0.93 || lightness < 0.07) continue;
+          if (saturation < 0.12) continue;
+          const qr = Math.min(255, Math.round(r / 12) * 12);
+          const qg = Math.min(255, Math.round(g / 12) * 12);
+          const qb = Math.min(255, Math.round(b / 12) * 12);
+          const key = `${qr},${qg},${qb}`;
+          const current = bins.get(key) || { count: 0, score: 0, rgb: [qr, qg, qb] };
+          current.count += 1;
+          current.score += 0.4 + saturation * 1.6;
+          bins.set(key, current);
+        }
+        const selected = [...bins.values()].sort((a, b) => b.score - a.score || b.count - a.count)[0];
+        const color = selected ? `rgb(${selected.rgb[0]}, ${selected.rgb[1]}, ${selected.rgb[2]})` : null;
+        spriteColorCache.set(cacheKey, color);
+        return color;
+      } catch (error) {
+        console.debug(`Could not read sprite color for ${iconName}.`, error);
+        spriteColorCache.set(cacheKey, null);
+        return null;
+      }
+    }
+
+    function evaluateNumericStyleValue(expression, feature, fallback = null) {
+      const value = evaluateStyleExpression(expression, feature?.properties || {}, { zoom: map.getZoom() });
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    }
+
+    function symbolLayerHasVisibleIcon(layer, feature) {
+      if (!layer || layer.type !== 'symbol') return true;
+      const iconName = iconNameForFeature(layer, feature);
+      if (!iconName) return false;
+      const opacity = evaluateNumericStyleValue(layer.paint?.['icon-opacity'], feature, 1);
+      const size = evaluateNumericStyleValue(layer.layout?.['icon-size'], feature, 1);
+      return opacity > 0.01 && size > 0.01;
+    }
+
+    function captureLegendCanvasSnapshot() {
+      try {
+        const source = map.getCanvas();
+        const canvas = document.createElement('canvas');
+        canvas.width = source.width;
+        canvas.height = source.height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return null;
+        context.drawImage(source, 0, 0);
+        return {
+          canvas,
+          context,
+          ratioX: source.width / Math.max(1, source.clientWidth),
+          ratioY: source.height / Math.max(1, source.clientHeight)
+        };
+      } catch (error) {
+        console.debug('Could not capture the rendered map for legend visibility checks.', error);
+        return null;
+      }
+    }
+
+    function spriteAlphaMask(sprite, iconName) {
+      if (!sprite?.json?.[iconName] || !sprite?.img) return null;
+      const meta = sprite.json[iconName];
+      const cacheKey = `${iconName}|${meta.x}|${meta.y}|${meta.width}|${meta.height}|${meta.pixelRatio || 1}`;
+      if (spriteAlphaMaskCache.has(cacheKey)) return spriteAlphaMaskCache.get(cacheKey);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = meta.width;
+        canvas.height = meta.height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return null;
+        context.drawImage(
+          sprite.img,
+          meta.x, meta.y, meta.width, meta.height,
+          0, 0, meta.width, meta.height
+        );
+        const pixels = context.getImageData(0, 0, meta.width, meta.height).data;
+        const alpha = new Uint8Array(meta.width * meta.height);
+        let opaqueCount = 0;
+        for (let index = 0; index < alpha.length; index += 1) {
+          alpha[index] = pixels[index * 4 + 3];
+          if (alpha[index] > 40) opaqueCount += 1;
+        }
+        const result = opaqueCount > 3 ? {
+          width: meta.width,
+          height: meta.height,
+          pixelRatio: meta.pixelRatio || 1,
+          alpha
+        } : null;
+        spriteAlphaMaskCache.set(cacheKey, result);
+        return result;
+      } catch (error) {
+        console.debug(`Could not create a visibility mask for ${iconName}.`, error);
+        spriteAlphaMaskCache.set(cacheKey, null);
+        return null;
+      }
+    }
+
+    function meanRgb(samples) {
+      if (!samples.length) return null;
+      let r = 0; let g = 0; let b = 0;
+      samples.forEach(sample => { r += sample[0]; g += sample[1]; b += sample[2]; });
+      return [r / samples.length, g / samples.length, b / samples.length];
+    }
+
+    function rgbDistance(left, right) {
+      if (!left || !right) return 0;
+      return Math.hypot(left[0] - right[0], left[1] - right[1], left[2] - right[2]);
+    }
+
+    function iconAnchorCenterOffset(anchor, width, height) {
+      switch (anchor) {
+        case 'top': return [0, height / 2];
+        case 'bottom': return [0, -height / 2];
+        case 'left': return [width / 2, 0];
+        case 'right': return [-width / 2, 0];
+        case 'top-left': return [width / 2, height / 2];
+        case 'top-right': return [-width / 2, height / 2];
+        case 'bottom-left': return [width / 2, -height / 2];
+        case 'bottom-right': return [-width / 2, -height / 2];
+        default: return [0, 0];
+      }
+    }
+
+    function renderedSpriteMatchScore(feature, layer, sprite) {
+      const snapshot = legendCanvasSnapshot;
+      if (!snapshot || !feature || !layer || layer.type !== 'symbol') return 0;
+      const coordinates = feature.geometry?.type === 'Point'
+        ? feature.geometry.coordinates
+        : feature.geometry?.type === 'MultiPoint'
+          ? feature.geometry.coordinates?.[0]
+          : null;
+      if (!Array.isArray(coordinates)) return 0;
+
+      const iconName = iconNameForFeature(layer, feature);
+      const mask = spriteAlphaMask(sprite, iconName);
+      if (!iconName || !mask) return 0;
+
+      const iconSize = Math.max(0.01, evaluateNumericStyleValue(layer.layout?.['icon-size'], feature, 1));
+      const iconOpacity = Math.max(0, evaluateNumericStyleValue(layer.paint?.['icon-opacity'], feature, 1));
+      if (iconOpacity <= 0.02 || iconSize <= 0.02) return 0;
+
+      const widthCss = Math.max(4, (mask.width / mask.pixelRatio) * iconSize);
+      const heightCss = Math.max(4, (mask.height / mask.pixelRatio) * iconSize);
+      const projected = map.project(coordinates);
+      if (!pointIsInsideViewport(projected, 2)) return 0;
+
+      const offsetValue = evaluateStyleExpression(layer.layout?.['icon-offset'], feature.properties || {}, { zoom: map.getZoom() });
+      const offset = Array.isArray(offsetValue) ? offsetValue : [0, 0];
+      const anchor = evaluateStyleExpression(layer.layout?.['icon-anchor'], feature.properties || {}, { zoom: map.getZoom() }) || 'center';
+      const anchorOffset = iconAnchorCenterOffset(anchor, widthCss, heightCss);
+      const centerCss = {
+        x: projected.x + anchorOffset[0] + Number(offset[0] || 0) * iconSize,
+        y: projected.y + anchorOffset[1] + Number(offset[1] || 0) * iconSize
+      };
+
+      const expectedWidthPx = Math.max(4, Math.round(widthCss * snapshot.ratioX));
+      const expectedHeightPx = Math.max(4, Math.round(heightCss * snapshot.ratioY));
+      const searchOffsets = [-4, 0, 4];
+      let bestScore = 0;
+
+      for (const offsetY of searchOffsets) {
+        for (const offsetX of searchOffsets) {
+          const centerX = Math.round((centerCss.x + offsetX) * snapshot.ratioX);
+          const centerY = Math.round((centerCss.y + offsetY) * snapshot.ratioY);
+          const left = Math.round(centerX - expectedWidthPx / 2);
+          const top = Math.round(centerY - expectedHeightPx / 2);
+          const ring = Math.max(3, Math.round(4 * Math.max(snapshot.ratioX, snapshot.ratioY)));
+          const sampleLeft = Math.max(0, left - ring);
+          const sampleTop = Math.max(0, top - ring);
+          const sampleRight = Math.min(snapshot.canvas.width, left + expectedWidthPx + ring);
+          const sampleBottom = Math.min(snapshot.canvas.height, top + expectedHeightPx + ring);
+          const sampleWidth = sampleRight - sampleLeft;
+          const sampleHeight = sampleBottom - sampleTop;
+          if (sampleWidth < 5 || sampleHeight < 5) continue;
+
+          let data;
+          try {
+            data = snapshot.context.getImageData(sampleLeft, sampleTop, sampleWidth, sampleHeight).data;
+          } catch (_) {
+            continue;
+          }
+
+          const iconSamples = [];
+          const outsideSamples = [];
+          let iconLuminanceSum = 0;
+          let iconLuminanceSquared = 0;
+
+          for (let y = 0; y < sampleHeight; y += 1) {
+            for (let x = 0; x < sampleWidth; x += 1) {
+              const globalX = sampleLeft + x;
+              const globalY = sampleTop + y;
+              const relativeX = globalX - left;
+              const relativeY = globalY - top;
+              const pixelIndex = (y * sampleWidth + x) * 4;
+              const alpha = data[pixelIndex + 3];
+              if (alpha < 100) continue;
+              const rgb = [data[pixelIndex], data[pixelIndex + 1], data[pixelIndex + 2]];
+
+              if (relativeX >= 0 && relativeY >= 0 && relativeX < expectedWidthPx && relativeY < expectedHeightPx) {
+                const maskX = Math.min(mask.width - 1, Math.max(0, Math.floor(relativeX / expectedWidthPx * mask.width)));
+                const maskY = Math.min(mask.height - 1, Math.max(0, Math.floor(relativeY / expectedHeightPx * mask.height)));
+                if (mask.alpha[maskY * mask.width + maskX] > 55) {
+                  iconSamples.push(rgb);
+                  const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+                  iconLuminanceSum += luminance;
+                  iconLuminanceSquared += luminance * luminance;
+                }
+              } else {
+                outsideSamples.push(rgb);
+              }
+            }
+          }
+
+          if (iconSamples.length < 5 || outsideSamples.length < 10) continue;
+          const iconMean = meanRgb(iconSamples);
+          const outsideMean = meanRgb(outsideSamples);
+          const meanDistance = rgbDistance(iconMean, outsideMean);
+          const luminanceMean = iconLuminanceSum / iconSamples.length;
+          const luminanceVariance = Math.max(0, iconLuminanceSquared / iconSamples.length - luminanceMean * luminanceMean);
+          const score = meanDistance + Math.min(35, Math.sqrt(luminanceVariance) * 0.7);
+          bestScore = Math.max(bestScore, score);
+        }
+      }
+
+      return bestScore;
+    }
+
+    function renderedCircleMatchScore(feature, layer) {
+      const snapshot = legendCanvasSnapshot;
+      const coordinates = feature?.geometry?.coordinates;
+      if (!snapshot || !Array.isArray(coordinates) || layer?.type !== 'circle') return 0;
+      const projected = map.project(coordinates);
+      if (!pointIsInsideViewport(projected, 2)) return 0;
+      const radiusCss = Math.max(2, evaluateNumericStyleValue(layer.paint?.['circle-radius'], feature, 5));
+      const centerX = Math.round(projected.x * snapshot.ratioX);
+      const centerY = Math.round(projected.y * snapshot.ratioY);
+      const radiusPx = Math.max(2, Math.round(radiusCss * Math.max(snapshot.ratioX, snapshot.ratioY)));
+      const outerRadius = radiusPx + Math.max(3, Math.round(3 * Math.max(snapshot.ratioX, snapshot.ratioY)));
+      const left = Math.max(0, centerX - outerRadius);
+      const top = Math.max(0, centerY - outerRadius);
+      const right = Math.min(snapshot.canvas.width, centerX + outerRadius + 1);
+      const bottom = Math.min(snapshot.canvas.height, centerY + outerRadius + 1);
+      if (right <= left || bottom <= top) return 0;
+      let data;
+      try { data = snapshot.context.getImageData(left, top, right - left, bottom - top).data; } catch (_) { return 0; }
+      const inner = [];
+      const outer = [];
+      for (let y = 0; y < bottom - top; y += 1) {
+        for (let x = 0; x < right - left; x += 1) {
+          const distance = Math.hypot(left + x - centerX, top + y - centerY);
+          const index = (y * (right - left) + x) * 4;
+          const rgb = [data[index], data[index + 1], data[index + 2]];
+          if (distance <= radiusPx * 0.8) inner.push(rgb);
+          else if (distance >= radiusPx * 1.1 && distance <= outerRadius) outer.push(rgb);
+        }
+      }
+      return rgbDistance(meanRgb(inner), meanRgb(outer));
+    }
+
+    function renderedMapSymbolIsVisible(feature, layer, sprite) {
+      if (!layer || !layerVisibleAtCurrentZoom(layer)) return false;
+      if (map.getLayoutProperty(layer.id, 'visibility') === 'none') return false;
+      if (layer.type === 'symbol') {
+        if (!symbolLayerHasVisibleIcon(layer, feature)) return false;
+        // A score above this threshold means pixels following the actual sprite
+        // mask differ clearly from the surrounding basemap. Collision-hidden
+        // vector-tile features normally score close to zero.
+        return renderedSpriteMatchScore(feature, layer, sprite) >= 24;
+      }
+      if (layer.type === 'circle') return renderedCircleMatchScore(feature, layer) >= 18;
+      return false;
+    }
+
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const lightness = (max + min) / 2;
+      let hue = 0;
+      let saturation = 0;
+      if (max !== min) {
+        const delta = max - min;
+        saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+        switch (max) {
+          case r: hue = (g - b) / delta + (g < b ? 6 : 0); break;
+          case g: hue = (b - r) / delta + 2; break;
+          default: hue = (r - g) / delta + 4;
+        }
+        hue /= 6;
+      }
+      return { hue, saturation, lightness };
+    }
+
+    function colorDistance(a, b) {
+      return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
+    }
+
+    function renderedIconBackgroundColor(feature, radius = 10) {
+      const coordinates = feature?.geometry?.coordinates;
+      if (!Array.isArray(coordinates)) return null;
+      try {
+        const projected = map.project(coordinates);
+        const sourceCanvas = map.getCanvas();
+        const pixelRatioX = sourceCanvas.width / Math.max(1, sourceCanvas.clientWidth);
+        const pixelRatioY = sourceCanvas.height / Math.max(1, sourceCanvas.clientHeight);
+        const sx = Math.round(projected.x * pixelRatioX);
+        const sy = Math.round(projected.y * pixelRatioY);
+        const sampleRadiusX = Math.max(6, Math.round(radius * pixelRatioX));
+        const sampleRadiusY = Math.max(6, Math.round(radius * pixelRatioY));
+        const sampleWidth = Math.min(sourceCanvas.width, sampleRadiusX * 2 + 1);
+        const sampleHeight = Math.min(sourceCanvas.height, sampleRadiusY * 2 + 1);
+        const sourceX = Math.max(0, Math.min(sourceCanvas.width - sampleWidth, sx - sampleRadiusX));
+        const sourceY = Math.max(0, Math.min(sourceCanvas.height - sampleHeight, sy - sampleRadiusY));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = sampleWidth;
+        canvas.height = sampleHeight;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return null;
+        context.drawImage(sourceCanvas, sourceX, sourceY, sampleWidth, sampleHeight, 0, 0, sampleWidth, sampleHeight);
+        const imageData = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
+
+        const bins = new Map();
+        const centerX = sampleWidth / 2;
+        const centerY = sampleHeight / 2;
+        const scale = Math.max(pixelRatioX, pixelRatioY);
+        const innerRadius = 2.5 * scale;
+        const outerRadius = 8.5 * scale;
+        const idealRadius = 5.5 * scale;
+
+        for (let y = 0; y < sampleHeight; y += 1) {
+          for (let x = 0; x < sampleWidth; x += 1) {
+            const distanceFromCenter = Math.hypot(x - centerX, y - centerY);
+            // The white glyph is usually in the center and the basemap is outside
+            // the icon. Sampling this ring targets the square icon background.
+            if (distanceFromCenter < innerRadius || distanceFromCenter > outerRadius) continue;
+
+            const index = (y * sampleWidth + x) * 4;
+            const r = imageData[index];
+            const g = imageData[index + 1];
+            const b = imageData[index + 2];
+            const alpha = imageData[index + 3];
+            if (alpha < 180) continue;
+
+            const { saturation, lightness } = rgbToHsl(r, g, b);
+            if (lightness > 0.94 || lightness < 0.06) continue;
+
+            const qr = Math.max(0, Math.min(255, Math.round(r / 8) * 8));
+            const qg = Math.max(0, Math.min(255, Math.round(g / 8) * 8));
+            const qb = Math.max(0, Math.min(255, Math.round(b / 8) * 8));
+            const key = `${qr},${qg},${qb}`;
+            const radialWeight = Math.max(0.2, 1 - Math.abs(distanceFromCenter - idealRadius) / Math.max(1, outerRadius - innerRadius));
+            const chromaWeight = 0.65 + saturation * 2.1;
+            const current = bins.get(key) || { score: 0, count: 0, rgb: [qr, qg, qb], saturation, lightness };
+            current.score += radialWeight * chromaWeight;
+            current.count += 1;
+            current.saturation = Math.max(current.saturation, saturation);
+            bins.set(key, current);
+          }
+        }
+
+        const candidates = [...bins.values()]
+          .filter(candidate => candidate.count >= 2)
+          .sort((left, right) => right.score - left.score || right.count - left.count);
+        if (!candidates.length) return null;
+
+        const colored = candidates.find(candidate => candidate.saturation >= 0.16);
+        const selected = colored || candidates.find(candidate => candidate.lightness >= 0.16 && candidate.lightness <= 0.82);
+        if (!selected) return null;
+        return `rgb(${selected.rgb[0]}, ${selected.rgb[1]}, ${selected.rgb[2]})`;
+      } catch (error) {
+        console.debug('Could not sample rendered POI color from the map canvas.', error);
+        return null;
+      }
+    }
+
+    function renderedSymbolExists(feature, layerId) {
+      const coordinates = feature?.geometry?.coordinates;
+      if (!Array.isArray(coordinates)) return true;
+      try {
+        const point = map.project(coordinates);
+        if (!pointIsInsideViewport(point, 1)) return false;
+        const searchRadius = 4;
+        const hits = map.queryRenderedFeatures(
+          [[point.x - searchRadius, point.y - searchRadius], [point.x + searchRadius, point.y + searchRadius]],
+          { layers: [layerId] }
+        );
+        return hits.some(candidate => sameFeatureApprox(candidate, feature));
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function renderedPointFeatureEntries() {
+      const styleLayers = new Map((map.getStyle()?.layers || []).map(layer => [layer.id, layer]));
+      let rendered = [];
+      try {
+        // With no layer list, MapTiler returns the features actually rendered in
+        // the current viewport at the current zoom. Filtering happens below.
+        rendered = map.queryRenderedFeatures();
+      } catch (error) {
+        console.debug('Could not query rendered map features.', error);
+        return [];
+      }
+
+      const entries = [];
+      const seen = new Set();
+      rendered.forEach(feature => {
+        const layerId = feature.layer?.id;
+        const layer = styleLayers.get(layerId);
+        if (!layer || !['symbol', 'circle'].includes(layer.type)) return;
+        if (!layerVisibleAtCurrentZoom(layer)) return;
+        if (map.getLayoutProperty(layerId, 'visibility') === 'none') return;
+        if (!['Point', 'MultiPoint'].includes(feature.geometry?.type)) return;
+
+        const coordinates = feature.geometry.type === 'Point'
+          ? feature.geometry.coordinates
+          : feature.geometry.coordinates?.[0];
+        if (!Array.isArray(coordinates) || coordinates.length < 2) return;
+
+        const screenPoint = map.project(coordinates);
+        if (!pointIsInsideViewport(screenPoint, 1)) return;
+
+        let iconName = null;
+        if (layer.type === 'symbol') {
+          iconName = iconNameForFeature(layer, feature);
+          // Text-only labels must never become POIs or lift symbols.
+          if (!iconName) return;
+          const opacity = evaluateNumericStyleValue(layer.paint?.['icon-opacity'], feature, 1);
+          const size = evaluateNumericStyleValue(layer.layout?.['icon-size'], feature, 1);
+          if (!(opacity > 0.01 && size > 0.01)) return;
+        }
+
+        const key = [
+          layerId,
+          feature.id ?? '',
+          feature.properties?.name || '',
+          iconName || '',
+          Math.round(screenPoint.x),
+          Math.round(screenPoint.y)
+        ].join('|');
+        if (seen.has(key)) return;
+        seen.add(key);
+        entries.push({ feature, layer, iconName, coordinates, screenPoint });
+      });
+      return entries;
+    }
+
+    const LIFT_RENDERED_PATTERN = /(aerialway|chair\s*lift|chairlift|gondola|cable\s*car|cablecar|tramway|rope\s*tow|drag\s*lift|surface\s*lift|t\s*-?\s*bar|platter|magic\s*carpet|lift\s*station|pylon)/i;
+    const NON_POI_RENDERED_PATTERN = /(road|street|highway|motorway|trunk|route\s*shield|shield|country|state|province|city|town|village|hamlet|suburb|quarter|neighbou?rhood|isolated\s*dwelling|boundary|contour|waterway|river|stream|house\s*number|building\s*number|piste|ski\s*run)/i;
+    const POI_RENDERED_PATTERN = /(poi|amenity|tourism|shop|leisure|historic|healthcare|emergency|information|guidepost|viewpoint|peak|summit|mountain|spring|drinking|bench|toilet|shelter|hotel|hostel|restaurant|cafe|bar|pub|parking|bus\s*stop|station|religion|church|chapel|aerodrome|airport|museum|attraction|camp|picnic|pharmacy|hospital)/i;
+
+    function renderedEntrySearchText(entry) {
+      const { feature, layer, iconName } = entry;
+      const properties = feature.properties || {};
+      return [
+        layer.id,
+        layer['source-layer'],
+        iconName,
+        properties.aerialway,
+        properties.class,
+        properties.subclass,
+        properties.category,
+        properties.type,
+        properties.maki,
+        properties.amenity,
+        properties.tourism,
+        properties.natural,
+        properties.shop,
+        properties.leisure,
+        properties.historic,
+        properties.healthcare,
+        properties.emergency,
+        properties.information,
+        properties.religion
+      ].filter(value => value !== null && value !== undefined && value !== '').join(' ');
+    }
+
+    function entryIsLift(entry) {
+      return LIFT_RENDERED_PATTERN.test(renderedEntrySearchText(entry));
+    }
+
+    function entryIsPoi(entry) {
+      if (entryIsLift(entry)) return false;
+      const searchText = renderedEntrySearchText(entry);
+      if (NON_POI_RENDERED_PATTERN.test(searchText)) return false;
+      if (POI_RENDERED_PATTERN.test(searchText)) return true;
+
+      // Generic icon layers are accepted only when they contain a known POI
+      // category. This rejects place labels and road shields with icons.
+      const label = categoryForPoiOrLift({ id: 'resort-pois' }, entry.feature, entry.layer);
+      return Boolean(label && label !== 'Other POIs' && !NON_POI_RENDERED_PATTERN.test(label));
+    }
+
+    function dedupeRenderedEntries(entries, radiusPixels = 8) {
+      const result = [];
+      entries.forEach(entry => {
+        const label = entryIsLift(entry)
+          ? categoryForPoiOrLift({ id: 'resort-lifts' }, entry.feature, entry.layer)
+          : categoryForPoiOrLift({ id: 'resort-pois' }, entry.feature, entry.layer);
+        const name = String(entry.feature.properties?.name || '').trim().toLowerCase();
+        const duplicate = result.some(existing => {
+          const existingLabel = entryIsLift(existing)
+            ? categoryForPoiOrLift({ id: 'resort-lifts' }, existing.feature, existing.layer)
+            : categoryForPoiOrLift({ id: 'resort-pois' }, existing.feature, existing.layer);
+          const existingName = String(existing.feature.properties?.name || '').trim().toLowerCase();
+          return existingLabel === label
+            && existingName === name
+            && Math.hypot(existing.screenPoint.x - entry.screenPoint.x, existing.screenPoint.y - entry.screenPoint.y) <= radiusPixels;
+        });
+        if (!duplicate) result.push(entry);
+      });
+      return result;
+    }
+
+    function collectVisibleMapSymbols() {
+      // One MapTiler rendered-feature query per legend build. POIs and lifts are
+      // classified and deduplicated independently so overlapping categories do
+      // not suppress one another.
+      const entries = renderedPointFeatureEntries();
+      return {
+        lifts: dedupeRenderedEntries(entries.filter(entryIsLift), 8),
+        pois: dedupeRenderedEntries(entries.filter(entryIsPoi), 8)
+      };
+    }
+
+    function discoverLiftLayerIds() {
+      const styleLayers = map.getStyle()?.layers || [];
+      return styleLayers
+        .filter(layer => {
+          const searchable = [
+            layer.id,
+            layer['source-layer'],
+            layer.filter ? JSON.stringify(layer.filter) : '',
+            layer.layout?.['icon-image'] ? JSON.stringify(layer.layout['icon-image']) : ''
+          ].join(' ');
+          return LIFT_RENDERED_PATTERN.test(searchable);
+        })
+        .map(layer => layer.id)
+        .filter(layerId => map.getLayer(layerId));
+    }
+
+    function discoverPoiLayerIds(includeGenericIconLayers = false) {
+      const styleLayers = map.getStyle()?.layers || [];
+      const liftIds = new Set(discoverLiftLayerIds());
+      return styleLayers
+        .filter(layer => {
+          if (!['symbol', 'circle'].includes(layer.type)) return false;
+          if (liftIds.has(layer.id)) return false;
+          const iconExpression = layer.layout?.['icon-image'];
+          const searchable = [
+            layer.id || '',
+            layer['source-layer'] || '',
+            layer.filter ? JSON.stringify(layer.filter) : '',
+            iconExpression ? JSON.stringify(iconExpression) : ''
+          ].join(' ');
+          return POI_RENDERED_PATTERN.test(searchable)
+            || (includeGenericIconLayers && layer.type === 'symbol' && Boolean(iconExpression) && !NON_POI_RENDERED_PATTERN.test(searchable));
+        })
+        .map(layer => layer.id)
+        .filter(layerId => map.getLayer(layerId));
+    }
+
+    function extractMatchPairs(expression) {
+      if (!Array.isArray(expression) || expression[0] !== 'match') return null;
+      const pairs = [];
+      for (let index = 2; index < expression.length - 1; index += 2) {
+        const keys = Array.isArray(expression[index]) ? expression[index] : [expression[index]];
+        const output = expression[index + 1];
+        keys.forEach(value => pairs.push({ value, output }));
+      }
+      return pairs;
+    }
+
+    function extractMatchInputProperty(expression) {
+      if (!Array.isArray(expression) || expression[0] !== 'match') return null;
+      return findFirstGetProperty(expression[1]);
+    }
+
+    function findFirstGetProperty(expression) {
+      if (!Array.isArray(expression)) return null;
+      if (expression[0] === 'get' && typeof expression[1] === 'string') return expression[1];
+      for (let index = 1; index < expression.length; index += 1) {
+        const found = findFirstGetProperty(expression[index]);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    function replacePropertyTokens(value, properties) {
+      if (typeof value !== 'string' || !value.includes('{')) return value;
+      return value.replace(/\{([^}]+)\}/g, (_, propertyName) => {
+        const replacement = properties?.[propertyName];
+        return replacement === null || replacement === undefined ? '' : String(replacement);
+      });
+    }
+
+    // Small Mapbox-expression evaluator used only for legend swatches. It covers
+    // the categorical and icon expressions normally used by MapTiler styles.
+    function evaluateStyleExpression(expression, properties = {}, context = {}) {
+      if (expression === null || expression === undefined) return expression;
+      if (!Array.isArray(expression)) {
+        return typeof expression === 'string' ? replacePropertyTokens(expression, properties) : expression;
+      }
+      if (!expression.length) return undefined;
+
+      const operation = expression[0];
+      const evaluate = value => evaluateStyleExpression(value, properties, context);
+
+      switch (operation) {
+        case 'literal': return expression[1];
+        case 'image': return evaluate(expression[1]);
+        case 'get': return properties?.[expression[1]];
+        case 'has': return Object.prototype.hasOwnProperty.call(properties || {}, expression[1]);
+        case 'zoom': return context.zoom ?? map.getZoom();
+        case 'coalesce': {
+          for (let index = 1; index < expression.length; index += 1) {
+            const value = evaluate(expression[index]);
+            if (value !== null && value !== undefined && value !== '') return value;
+          }
+          return null;
+        }
+        case 'to-string': {
+          const value = evaluate(expression[1]);
+          return value === null || value === undefined ? '' : String(value);
+        }
+        case 'to-number': {
+          const value = Number(evaluate(expression[1]));
+          return Number.isFinite(value) ? value : evaluate(expression[2]);
+        }
+        case 'to-color': return evaluate(expression[1]);
+        case 'upcase': return String(evaluate(expression[1]) ?? '').toUpperCase();
+        case 'downcase': return String(evaluate(expression[1]) ?? '').toLowerCase();
+        case 'concat': return expression.slice(1).map(evaluate).join('');
+        case 'rgb': return `rgb(${evaluate(expression[1])}, ${evaluate(expression[2])}, ${evaluate(expression[3])})`;
+        case 'rgba': return `rgba(${evaluate(expression[1])}, ${evaluate(expression[2])}, ${evaluate(expression[3])}, ${evaluate(expression[4])})`;
+        case 'match': {
+          const input = evaluate(expression[1]);
+          for (let index = 2; index < expression.length - 1; index += 2) {
+            const expected = expression[index];
+            const matches = Array.isArray(expected) ? expected.includes(input) : expected === input;
+            if (matches) return evaluate(expression[index + 1]);
+          }
+          return evaluate(expression[expression.length - 1]);
+        }
+        case 'case': {
+          for (let index = 1; index < expression.length - 1; index += 2) {
+            if (Boolean(evaluate(expression[index]))) return evaluate(expression[index + 1]);
+          }
+          return evaluate(expression[expression.length - 1]);
+        }
+        case 'step': {
+          const input = Number(evaluate(expression[1]));
+          let output = evaluate(expression[2]);
+          for (let index = 3; index < expression.length; index += 2) {
+            const stop = Number(evaluate(expression[index]));
+            if (!Number.isFinite(input) || input < stop) break;
+            output = evaluate(expression[index + 1]);
+          }
+          return output;
+        }
+        case 'interpolate': {
+          const input = Number(evaluate(expression[2]));
+          if (!Number.isFinite(input)) return evaluate(expression[4]);
+          let selected = expression[4];
+          for (let index = 3; index < expression.length; index += 2) {
+            const stop = Number(evaluate(expression[index]));
+            if (input < stop) break;
+            selected = expression[index + 1];
+          }
+          return evaluate(selected);
+        }
+        case '==': return evaluate(expression[1]) === evaluate(expression[2]);
+        case '!=': return evaluate(expression[1]) !== evaluate(expression[2]);
+        case '>': return evaluate(expression[1]) > evaluate(expression[2]);
+        case '>=': return evaluate(expression[1]) >= evaluate(expression[2]);
+        case '<': return evaluate(expression[1]) < evaluate(expression[2]);
+        case '<=': return evaluate(expression[1]) <= evaluate(expression[2]);
+        case '!': return !Boolean(evaluate(expression[1]));
+        case 'all': return expression.slice(1).every(item => Boolean(evaluate(item)));
+        case 'any': return expression.slice(1).some(item => Boolean(evaluate(item)));
+        case 'in': {
+          const needle = evaluate(expression[1]);
+          const haystack = evaluate(expression[2]);
+          if (Array.isArray(haystack) || typeof haystack === 'string') return haystack.includes(needle);
+          return expression.slice(2).map(evaluate).includes(needle);
+        }
+        default: return undefined;
+      }
+    }
+
+    function safeCssColor(value, fallback = '#667085') {
+      if (typeof value !== 'string') return fallback;
+      try {
+        return window.CSS?.supports?.('color', value) ? value : fallback;
+      } catch (_) {
+        return fallback;
+      }
+    }
+
+    function normalizeLegendLabel(value) {
+      if (value === null || value === undefined) return '';
+      const normalized = String(value)
+        .replace(/[-_]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!normalized) return '';
+      return normalized.replace(/\b\w/g, character => character.toUpperCase());
+    }
+
+    const runTypeDefinitions = [
+      { label: 'Downhill', color: '#1976d2', dash: 'solid', matchers: ['downhill', 'alpine', 'groomed', 'piste'] },
+      { label: 'Nordic', color: '#1565c0', dash: 'solid', matchers: ['nordic', 'cross_country', 'cross-country', 'cross country', 'xc'] },
+      { label: 'Downhill backcountry', color: '#1976d2', dash: 'dashed', matchers: ['ungroomed', 'backcountry', 'freeride', 'offpiste', 'off-piste', 'ski_tour', 'ski tour', 'ski_route', 'ski route', 'mogul', 'moguls', 'gladed', 'glade', 'tree skiing', 'extreme'] },
+      { label: 'Nordic backcountry', color: '#1565c0', dash: 'dashed', matchers: ['nordic_ungroomed', 'nordic ungroomed', 'backcountry_nordic', 'backcountry nordic', 'nordic_backcountry', 'nordic backcountry', 'backcountry route'] }
+    ];
+
+    const runTypePropertyCandidates = [
+      'piste:type', 'piste_type', 'pisteType', 'route', 'class', 'type',
+      'activity', 'subclass', 'description', 'name'
+    ];
+
+    function normalizeRunToken(value) {
+      return String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_:]+/g, ' ')
+        .replace(/[^a-z0-9\s-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function matchRunType(rawValue, layerId = '') {
+      const haystacks = [normalizeRunToken(rawValue), normalizeRunToken(layerId)].filter(Boolean);
+      for (const definition of runTypeDefinitions) {
+        const matched = definition.matchers.some(matcher => {
+          const normalizedMatcher = normalizeRunToken(matcher);
+          return haystacks.some(haystack => haystack === normalizedMatcher || haystack.includes(normalizedMatcher));
+        });
+        if (matched) return definition.label;
+      }
+      return '';
+    }
+
+    function runTypeDefinition(label) {
+      return runTypeDefinitions.find(definition => definition.label === label) || null;
+    }
+
+    function runTypeFromProperties(properties, layerId = '') {
+      for (const propertyName of runTypePropertyCandidates) {
+        const value = properties?.[propertyName];
+        const matched = matchRunType(value, layerId);
+        if (matched) return matched;
+      }
+      return matchRunType('', layerId);
+    }
+
+    function parseCategoryCondition(condition) {
+      if (!Array.isArray(condition)) return [];
+      const operation = condition[0];
+
+      if (operation === '==' || operation === '!=') {
+        const leftProperty = findFirstGetProperty(condition[1]);
+        const rightProperty = findFirstGetProperty(condition[2]);
+        if (leftProperty && !rightProperty) return [{ property: leftProperty, values: [condition[2]] }];
+        if (rightProperty && !leftProperty) return [{ property: rightProperty, values: [condition[1]] }];
+
+        // Legacy Mapbox filter syntax: ['==', 'difficulty', 'easy']
+        if (typeof condition[1] === 'string' && !Array.isArray(condition[2])) {
+          return [{ property: condition[1], values: [condition[2]] }];
+        }
+      }
+
+      if (operation === 'in') {
+        const property = findFirstGetProperty(condition[1]) || (typeof condition[1] === 'string' ? condition[1] : null);
+        if (!property) return [];
+        const evaluated = evaluateStyleExpression(condition[2]);
+        const values = Array.isArray(evaluated) ? evaluated : condition.slice(2);
+        return [{ property, values }];
+      }
+
+      if (operation === 'all' || operation === 'any') {
+        return condition.slice(1).flatMap(parseCategoryCondition);
+      }
+      return [];
+    }
+
+    function collectExpressionCategoryEntries(expression, output = []) {
+      if (!Array.isArray(expression)) return output;
+
+      if (expression[0] === 'match') {
+        const property = findFirstGetProperty(expression[1]);
+        if (property) {
+          for (let index = 2; index < expression.length - 1; index += 2) {
+            const values = Array.isArray(expression[index]) ? expression[index] : [expression[index]];
+            values.forEach(value => {
+              const properties = { [property]: value };
+              const color = evaluateStyleExpression(expression[index + 1], properties, { zoom: map.getZoom() });
+              if (typeof color === 'string') output.push({ property, value, color });
+            });
+          }
+        }
+      }
+
+      if (expression[0] === 'case') {
+        for (let index = 1; index < expression.length - 1; index += 2) {
+          parseCategoryCondition(expression[index]).forEach(({ property, values }) => {
+            values.forEach(value => {
+              const properties = { [property]: value };
+              const color = evaluateStyleExpression(expression[index + 1], properties, { zoom: map.getZoom() });
+              if (typeof color === 'string') output.push({ property, value, color });
+            });
+          });
+        }
+      }
+
+      expression.slice(1).forEach(item => collectExpressionCategoryEntries(item, output));
+      return output;
+    }
+
+    function featureMatchesLayerFilter(layer, feature) {
+      if (!layer?.filter) return true;
+      const result = evaluateStyleExpression(layer.filter, feature?.properties || {}, { zoom: map.getZoom() });
+      return result === undefined ? true : Boolean(result);
+    }
+
+    function findBackgroundLayer(symbolLayer, feature = null) {
+      const sourceLayer = symbolLayer?.['source-layer'];
+      const source = symbolLayer?.source;
+      if (!sourceLayer && !source) return null;
+      const styleLayers = map.getStyle()?.layers || [];
+      const candidates = styleLayers.filter(layer =>
+        layer.id !== symbolLayer.id &&
+        ['circle', 'fill', 'fill-extrusion'].includes(layer.type) &&
+        (layer.paint?.['circle-color'] || layer.paint?.['fill-color']) &&
+        ((sourceLayer && layer['source-layer'] === sourceLayer) || (source && layer.source === source))
+      );
+
+      const preferred = candidates.filter(layer => {
+        const sameSourceLayer = sourceLayer && layer['source-layer'] === sourceLayer;
+        const samePrefix = layer.id.split('-')[0] === symbolLayer.id.split('-')[0];
+        const matchesFilter = feature ? featureMatchesLayerFilter(layer, feature) : true;
+        return matchesFilter && (sameSourceLayer || samePrefix);
+      });
+
+      return preferred[0] || candidates.find(layer => feature ? featureMatchesLayerFilter(layer, feature) : true) || null;
+    }
+
+    function resolveFeatureColor(layer, feature) {
+      const colorExpression = layer?.paint?.['circle-color']
+        || layer?.paint?.['fill-color']
+        || layer?.paint?.['line-color']
+        || layer?.paint?.['icon-color']
+        || layer?.paint?.['text-color'];
+      const resolved = evaluateStyleExpression(colorExpression, feature?.properties || {}, { zoom: map.getZoom() });
+      return typeof resolved === 'string' ? safeCssColor(resolved, null) : null;
+    }
+
+    function layerVisibleAtCurrentZoom(layer) {
+      if (!layer) return false;
+      const zoom = map.getZoom();
+      const minZoom = Number.isFinite(layer.minzoom) ? layer.minzoom : -Infinity;
+      const maxZoom = Number.isFinite(layer.maxzoom) ? layer.maxzoom : Infinity;
+      return zoom >= minZoom && zoom < maxZoom;
+    }
+
+    function pointIsInsideViewport(point, padding = 6) {
+      if (!point) return false;
+      const canvas = map.getCanvas();
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      return point.x >= -padding && point.y >= -padding && point.x <= width + padding && point.y <= height + padding;
+    }
+
+    function sameFeatureApprox(a, b) {
+      const coordsA = a?.geometry?.coordinates;
+      const coordsB = b?.geometry?.coordinates;
+      if (!Array.isArray(coordsA) || !Array.isArray(coordsB)) return false;
+      const closeCoords = Math.abs(coordsA[0] - coordsB[0]) < 1e-6 && Math.abs(coordsA[1] - coordsB[1]) < 1e-6;
+      if (!closeCoords) return false;
+      const aName = a?.properties?.name || '';
+      const bName = b?.properties?.name || '';
+      const aClass = a?.properties?.class || a?.properties?.subclass || '';
+      const bClass = b?.properties?.class || b?.properties?.subclass || '';
+      return aName === bName && aClass === bClass;
+    }
+
+    function symbolFeatureReallyVisible(feature, layerId) {
+      try {
+        const coords = feature?.geometry?.coordinates;
+        if (!Array.isArray(coords)) return true;
+        const point = map.project(coords);
+        if (!pointIsInsideViewport(point, 2)) return false;
+        const hits = map.queryRenderedFeatures([[point.x - 2, point.y - 2], [point.x + 2, point.y + 2]], { layers: [layerId] });
+        return hits.some(candidate => sameFeatureApprox(candidate, feature));
+      } catch (error) {
+        return true;
+      }
+    }
+
+    function visibleFeaturesForControl(control) {
+      const layerIds = state.controlState[control.id]?.layerIds?.filter(layerId => map.getLayer(layerId)) || [];
+      if (!layerIds.length || !state.controlState[control.id]?.visible) return [];
+      try {
+        const raw = map.queryRenderedFeatures({ layers: layerIds });
+        const deduped = [];
+        const seen = new Set();
+        raw.forEach(feature => {
+          const layer = map.getLayer(feature.layer?.id);
+          if (!layer || !layerVisibleAtCurrentZoom(layer)) return;
+          if (feature?.geometry?.type === 'Point') {
+            const point = map.project(feature.geometry.coordinates);
+            if (!pointIsInsideViewport(point)) return;
+            if (layer.type === 'symbol') {
+              if (!symbolLayerHasVisibleIcon(layer, feature)) return;
+              if (!renderedSymbolExists(feature, layer.id)) return;
+            }
+          }
+          const coords = feature?.geometry?.coordinates;
+          const coordKey = Array.isArray(coords) ? `${coords[0].toFixed(5)},${coords[1].toFixed(5)}` : '';
+          const key = [feature.layer?.id || '', feature.properties?.name || '', feature.properties?.class || '', feature.properties?.subclass || '', coordKey].join('|');
+          if (seen.has(key)) return;
+          seen.add(key);
+          deduped.push(feature);
+        });
+        return deduped;
+      } catch (error) {
+        console.debug(`Could not query rendered features for ${control.label}.`, error);
+        return [];
+      }
+    }
+
+    function registerPoiLegendFeatures(features) {
+      const id = `poi-${++poiLegendItemCounter}`;
+      poiLegendFeatureIndex.set(id, features);
+      return id;
+    }
+
+    function pointFeaturesFromRenderedFeatures(features) {
+      const screenPoints = [];
+      const points = [];
+      features.forEach(feature => {
+        const geometry = feature?.geometry;
+        if (!geometry) return;
+        const coordinateSets = geometry.type === 'Point'
+          ? [geometry.coordinates]
+          : geometry.type === 'MultiPoint'
+            ? geometry.coordinates
+            : [];
+        coordinateSets.forEach(coordinates => {
+          if (!Array.isArray(coordinates) || coordinates.length < 2) return;
+          const longitude = Number(coordinates[0]);
+          const latitude = Number(coordinates[1]);
+          if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
+          const projected = map.project([longitude, latitude]);
+          if (!pointIsInsideViewport(projected, 8)) return;
+
+          // One visual highlight per displayed POI, even when MapTiler returns
+          // the same feature from several symbol/background/tile layers.
+          if (screenPoints.some(point => Math.hypot(point.x - projected.x, point.y - projected.y) <= 10)) return;
+          screenPoints.push({ x: projected.x, y: projected.y });
+          points.push({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'Point', coordinates: [longitude, latitude] }
+          });
+        });
+      });
+      return { type: 'FeatureCollection', features: points };
+    }
+
+    const POI_HIGHLIGHT_SOURCE = 'legend-poi-highlight-source';
+    const POI_HIGHLIGHT_HALO = 'legend-poi-highlight-halo';
+    const POI_HIGHLIGHT_CORE = 'legend-poi-highlight-core';
+
+    function ensurePoiHighlightLayers() {
+      if (!map.getSource(POI_HIGHLIGHT_SOURCE)) {
+        map.addSource(POI_HIGHLIGHT_SOURCE, {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] }
+        });
+      }
+      if (!map.getLayer(POI_HIGHLIGHT_HALO)) {
+        map.addLayer({
+          id: POI_HIGHLIGHT_HALO,
+          type: 'circle',
+          source: POI_HIGHLIGHT_SOURCE,
+          paint: {
+            'circle-pitch-alignment': 'viewport',
+            'circle-pitch-scale': 'viewport',
+            'circle-radius': 20,
+            'circle-color': '#fff200',
+            'circle-opacity': 0.55,
+            'circle-blur': 0.35,
+            'circle-stroke-color': '#ff9800',
+            'circle-stroke-width': 4,
+            'circle-stroke-opacity': 1
+          }
+        });
+      }
+      if (!map.getLayer(POI_HIGHLIGHT_CORE)) {
+        map.addLayer({
+          id: POI_HIGHLIGHT_CORE,
+          type: 'circle',
+          source: POI_HIGHLIGHT_SOURCE,
+          paint: {
+            'circle-pitch-alignment': 'viewport',
+            'circle-pitch-scale': 'viewport',
+            'circle-radius': 7,
+            'circle-color': '#fff700',
+            'circle-opacity': 1,
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 2,
+            'circle-stroke-opacity': 1
+          }
+        });
+      }
+      // Re-add to the top if another layer was created after the highlight.
+      try { map.moveLayer(POI_HIGHLIGHT_HALO); } catch (_) {}
+      try { map.moveLayer(POI_HIGHLIGHT_CORE); } catch (_) {}
+    }
+
+    function clearPoiHighlight() {
+      poiHighlightAnimating = false;
+      if (poiHighlightAnimationFrame !== null) {
+        cancelAnimationFrame(poiHighlightAnimationFrame);
+        poiHighlightAnimationFrame = null;
+      }
+      if (poiHighlightClearTimer !== null) {
+        clearTimeout(poiHighlightClearTimer);
+        poiHighlightClearTimer = null;
+      }
+      const source = map.getSource(POI_HIGHLIGHT_SOURCE);
+      if (source) source.setData({ type: 'FeatureCollection', features: [] });
+      poiHighlightMarkers.forEach(marker => {
+        try { marker.remove(); } catch (_) {}
+      });
+      poiHighlightMarkers = [];
+    }
+
+    function highlightPoiFeatures(features) {
+      const collection = pointFeaturesFromRenderedFeatures(features);
+      clearPoiHighlight();
+      if (!collection.features.length) return;
+
+      ensurePoiHighlightLayers();
+      const source = map.getSource(POI_HIGHLIGHT_SOURCE);
+      if (!source) return;
+      source.setData(collection);
+      poiHighlightAnimating = true;
+
+      const startedAt = performance.now();
+      const duration = 1800;
+      const animate = now => {
+        if (!poiHighlightAnimating) return;
+        const progress = Math.min(1, (now - startedAt) / duration);
+        // A single smooth shine: grow once, then fade once.
+        const pulse = Math.sin(progress * Math.PI);
+        try {
+          map.setPaintProperty(POI_HIGHLIGHT_HALO, 'circle-radius', 15 + pulse * 13);
+          map.setPaintProperty(POI_HIGHLIGHT_HALO, 'circle-opacity', 0.18 + pulse * 0.64);
+          map.setPaintProperty(POI_HIGHLIGHT_CORE, 'circle-radius', 5 + pulse * 4);
+          map.setPaintProperty(POI_HIGHLIGHT_CORE, 'circle-opacity', Math.max(0, 1 - progress * 0.55));
+        } catch (_) {}
+        if (progress < 1) {
+          poiHighlightAnimationFrame = requestAnimationFrame(animate);
+        }
+      };
+      poiHighlightAnimationFrame = requestAnimationFrame(animate);
+
+      poiHighlightClearTimer = setTimeout(() => {
+        clearPoiHighlight();
+        requestLegendBuild({ force: true, delay: 0 });
+      }, duration + 80);
+    }
+
+    function analyticalLegendRows(control) {
+      const controlState = state.controlState[control.id];
+      if (!controlState.visible || !controlState.available) return '';
+
+      if (control.legend === 'speed') {
+        return `
+          <div class="legend-row">
+            <div>
+              <div class="legend-gradient"></div>
+              <div class="legend-gradient-labels"><span>0</span><span>3</span><span>6</span><span>9</span><span>13+</span></div>
+            </div>
+            <span>Speed (m/s)</span>
+          </div>`;
+      }
+
+      if (control.legend === 'fall') {
+        const hasVisibleFall = state.filteredPoints.features.some(feature => feature.properties.__fall);
+        return hasVisibleFall
+          ? `<div class="legend-row"><span class="legend-dot" style="background:#d7191c"></span><span>Likely fall</span></div><div class="legend-row"><span class="legend-dot" style="background:#f59e0b"></span><span>Possible fall</span></div>`
+          : '';
+      }
+
+      if (control.legend === 'continuous') {
+        const stops = control.legendStops || [];
+        if (!stops.length) return '';
+        const colors = stops.map(stop => stop[1]).join(',');
+        const labels = stops.map(stop => `<span>${escapeHtml(stop[0])}</span>`).join('');
+        return `<div class="legend-row"><div><div class="legend-gradient" style="background:linear-gradient(90deg,${colors})"></div><div class="legend-gradient-labels">${labels}</div></div><span>${escapeHtml(control.legendTitle || control.label)}</span></div>`;
+      }
+
+      if (control.legend === 'categories') {
+        const visibleValues = new Set(state.filteredPoints.features.map(feature => feature.properties[control.categoryProperty]));
+        const colorMap = state.categoryColors[control.categoryProperty] || {};
+        return Object.entries(colorMap)
+          .filter(([value]) => visibleValues.has(value))
+          .map(([value, color]) =>
+            `<div class="legend-row"><span class="legend-line" style="border-color:${safeCssColor(color)};border-top-width:4px"></span><span>${escapeHtml(value)}</span></div>`
+          ).join('');
+      }
+      return '';
+    }
+
+    function fallbackStyleLegendRow(control) {
+      if (control.legend === 'line') {
+        return `<div class="legend-row"><span class="legend-line" style="border-color:${safeCssColor(control.color)}"></span><span>${escapeHtml(control.label)}</span></div>`;
+      }
+      return `<div class="legend-row"><span class="legend-dot" style="background:${safeCssColor(control.color)}"></span><span>${escapeHtml(control.label)}</span></div>`;
+    }
+
+    function runSwatchSvg(label) {
+      const blue = '#0b67b2';
+      const common = 'width="34" height="12" viewBox="0 0 34 12" aria-hidden="true" focusable="false"';
+
+      if (label === 'Nordic') {
+        return `<svg ${common}>
+          <line x1="3" y1="6" x2="31" y2="6" stroke="${blue}" stroke-width="7" stroke-linecap="round"></line>
+          <line x1="3" y1="6" x2="31" y2="6" stroke="#ffffff" stroke-width="3" stroke-linecap="round"></line>
+        </svg>`;
+      }
+
+      if (label === 'Downhill backcountry') {
+        return `<svg ${common}>
+          <line x1="3" y1="6" x2="31" y2="6" stroke="${blue}" stroke-width="4" stroke-linecap="round" stroke-dasharray="7 6"></line>
+        </svg>`;
+      }
+
+      if (label === 'Nordic backcountry') {
+        return `<svg ${common}>
+          <line x1="3" y1="6" x2="31" y2="6" stroke="${blue}" stroke-width="7" stroke-linecap="round" stroke-dasharray="8 5"></line>
+          <line x1="3" y1="6" x2="31" y2="6" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-dasharray="8 5"></line>
+        </svg>`;
+      }
+
+      return `<svg ${common}>
+        <line x1="3" y1="6" x2="31" y2="6" stroke="${blue}" stroke-width="4" stroke-linecap="round"></line>
+      </svg>`;
+    }
+
+    function runLegendRows() {
+      // Run-type symbols are fixed conventions. They are intentionally not
+      // recolored, hidden, or faded according to the current map BBOX.
+      return runTypeDefinitions.map(definition => `
+        <div class="legend-row" title="Fixed run-type convention">
+          <span style="display:inline-flex;width:34px;flex:0 0 34px;align-items:center;justify-content:center">
+            ${runSwatchSvg(definition.label)}
+          </span>
+          <span>${escapeHtml(definition.label)}</span>
+        </div>`).join('');
+    }
+
+    const poiCategoryAliases = {
+      aerodrome: 'Aerodrome', airport: 'Aerodrome',
+      drinkingwater: 'Drinking Water', 'drinking water': 'Drinking Water',
+      spring: 'Spring', bench: 'Bench', pub: 'Pub', bar: 'Bar', cafe: 'Cafe', restaurant: 'Restaurant',
+      hotel: 'Hotel', hostel: 'Hostel', parking: 'Parking',
+      firstaid: 'First Aid', 'first aid': 'First Aid', pharmacy: 'Pharmacy', hospital: 'Hospital',
+      station: 'Station', busstop: 'Bus Stop', 'bus stop': 'Bus Stop',
+      viewpoint: 'Viewpoint', guidepost: 'Guidepost',
+      peak: 'Summit', summit: 'Summit', mountain: 'Summit', triangle: 'Summit',
+      christian: 'Church / Chapel', chapel: 'Church / Chapel', church: 'Church / Chapel',
+      placeofworship: 'Church / Chapel', 'place of worship': 'Church / Chapel',
+      toilet: 'Toilets', toilets: 'Toilets', shelter: 'Shelter',
+      museum: 'Museum', attraction: 'Attraction', picnic: 'Picnic Site', campsite: 'Campsite'
+    };
+
+    const excludedPoiLabels = new Set([
+      'poi', 'other', 'default', 'unknown', 'yes', 'symbol', 'place',
+      'country', 'state', 'province', 'city', 'town', 'village', 'hamlet',
+      'suburb', 'quarter', 'neighbourhood', 'neighborhood', 'isolated dwelling'
+    ]);
+
+
+    // Fixed POI legend palette. These colors are intentionally independent
+    // of the active MapTiler style, sprite sheet, terrain, and canvas sampling.
+    const POI_BACKGROUND_COLORS = Object.freeze({
+      'Aerodrome': '#39789a',
+      'Drinking Water': '#58aee8',
+      'Spring': '#69a85f',
+      'Bench': '#6f777d',
+      'Pub': '#9a5b35',
+      'Bar': '#9a5b35',
+      'Cafe': '#b16a3c',
+      'Restaurant': '#b16a3c',
+      'Hotel': '#328477',
+      'Hostel': '#328477',
+      'Parking': '#3977b6',
+      'First Aid': '#d74c4c',
+      'Pharmacy': '#c84c73',
+      'Hospital': '#d74c4c',
+      'Station': '#426f9e',
+      'Bus Stop': '#4f8dbd',
+      'Viewpoint': '#66737e',
+      'Guidepost': '#66737e',
+      'Summit': '#5d6268',
+      'Church / Chapel': '#77689b',
+      'Toilets': '#66737e',
+      'Shelter': '#8a6a4d',
+      'Museum': '#8b5fa6',
+      'Attraction': '#8b5fa6',
+      'Picnic Site': '#4f9258',
+      'Campsite': '#4f9258',
+      'Other POIs': '#68737c'
+    });
+
+    const POI_FALLBACK_COLORS = Object.freeze([
+      '#39789a', '#328477', '#8b5fa6', '#9a5b35',
+      '#66737e', '#4f9258', '#c45b63', '#426f9e'
+    ]);
+
+    function hardcodedPoiBackgroundColor(label) {
+      if (POI_BACKGROUND_COLORS[label]) return POI_BACKGROUND_COLORS[label];
+      const value = String(label || 'Other POIs');
+      let hash = 0;
+      for (let index = 0; index < value.length; index += 1) {
+        hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+      }
+      return POI_FALLBACK_COLORS[Math.abs(hash) % POI_FALLBACK_COLORS.length];
+    }
+
+    function normalizePoiToken(value) {
+      return String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_:-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function friendlyPoiLabel(value) {
+      const normalized = normalizePoiToken(value);
+      if (!normalized || excludedPoiLabels.has(normalized)) return '';
+      const compact = normalized.replace(/\s+/g, '');
+      if (/^triangle(?:\s+\d+)?$/.test(normalized)) return 'Summit';
+      return poiCategoryAliases[normalized] || poiCategoryAliases[compact] || normalizeLegendLabel(value);
+    }
+
+    function categoryForPoiOrLift(control, feature, layer = null) {
+      const properties = feature.properties || {};
+      if (control.id === 'resort-lifts') {
+        const liftCandidates = ['aerialway', 'subclass', 'class', 'type', 'category'];
+        for (const propertyName of liftCandidates) {
+          const label = friendlyPoiLabel(properties[propertyName]) || normalizeLegendLabel(properties[propertyName]);
+          if (label && !excludedPoiLabels.has(normalizePoiToken(label))) return label;
+        }
+        const iconLabel = friendlyPoiLabel(iconNameForFeature(layer, feature));
+        return iconLabel || 'Lift';
+      }
+
+      // Specific POI attributes come before generic class/type values.
+      const poiCandidates = [
+        'amenity', 'tourism', 'natural', 'shop', 'leisure', 'historic',
+        'healthcare', 'emergency', 'information', 'maki', 'religion',
+        'subclass', 'category', 'class', 'type'
+      ];
+      for (const propertyName of poiCandidates) {
+        const label = friendlyPoiLabel(properties[propertyName]);
+        if (label) return label;
+      }
+      return friendlyPoiLabel(iconNameForFeature(layer, feature)) || 'Other POIs';
+    }
+
+    function iconNameForFeature(layer, feature) {
+      const iconExpression = layer?.layout?.['icon-image'];
+      const value = evaluateStyleExpression(iconExpression, feature.properties || {}, { zoom: map.getZoom() });
+      return typeof value === 'string' && value.trim() ? value.trim() : null;
+    }
+
+    function liftFallbackSvg(label, color = '#2f3437') {
+      const normalized = String(label || '').toLowerCase();
+      const common = `width="34" height="22" viewBox="0 0 34 22" aria-hidden="true" focusable="false"`;
+      const cable = `<line x1="3" y1="4" x2="31" y2="4" stroke="${color}" stroke-width="2" stroke-linecap="round"></line>`;
+
+      if (/chair/.test(normalized)) {
+        return `<svg ${common}>
+          ${cable}
+          <line x1="17" y1="4" x2="17" y2="10" stroke="${color}" stroke-width="2"></line>
+          <path d="M11 11h12v5H13a2 2 0 0 1-2-2z" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"></path>
+          <line x1="13" y1="16" x2="13" y2="20" stroke="${color}" stroke-width="2"></line>
+          <line x1="22" y1="16" x2="22" y2="20" stroke="${color}" stroke-width="2"></line>
+        </svg>`;
+      }
+
+      if (/gondola|cable car|cablecar|tram/.test(normalized)) {
+        return `<svg ${common}>
+          ${cable}
+          <line x1="17" y1="4" x2="17" y2="8" stroke="${color}" stroke-width="2"></line>
+          <rect x="10" y="8" width="14" height="10" rx="3" fill="none" stroke="${color}" stroke-width="2"></rect>
+          <line x1="14" y1="10" x2="14" y2="16" stroke="${color}" stroke-width="1.4"></line>
+          <line x1="20" y1="10" x2="20" y2="16" stroke="${color}" stroke-width="1.4"></line>
+        </svg>`;
+      }
+
+      if (/drag|t-bar|t bar|platter|surface/.test(normalized)) {
+        return `<svg ${common}>
+          ${cable}
+          <line x1="17" y1="4" x2="17" y2="16" stroke="${color}" stroke-width="2"></line>
+          <line x1="12" y1="16" x2="22" y2="16" stroke="${color}" stroke-width="2" stroke-linecap="round"></line>
+        </svg>`;
+      }
+
+      if (/station/.test(normalized)) {
+        return `<svg ${common}>
+          <line x1="3" y1="11" x2="25" y2="11" stroke="${color}" stroke-width="3" stroke-linecap="round"></line>
+          <circle cx="27" cy="11" r="4" fill="${color}" stroke="#ffffff" stroke-width="1.5"></circle>
+        </svg>`;
+      }
+
+      return `<svg ${common}>
+        ${cable}
+        <line x1="17" y1="4" x2="17" y2="17" stroke="${color}" stroke-width="2"></line>
+        <circle cx="17" cy="17" r="2.5" fill="${color}"></circle>
+      </svg>`;
+    }
+
+    function liftLegendRows(control, sprite, visibleSymbols) {
+      const styleLayers = map.getStyle()?.layers || [];
+      // queryRenderedFeatures already applies the current zoom, style visibility,
+      // viewport and symbol-collision state. Avoid the former canvas-pixel test,
+      // which rejected valid lift icons over textured terrain and hillshade.
+      const visibleFeatures = visibleSymbols.lifts.map(entry => entry.feature).filter(feature => {
+        const layer = styleLayers.find(candidate => candidate.id === feature.layer?.id);
+        if (!layer || !layerVisibleAtCurrentZoom(layer)) return false;
+        if (!['symbol', 'circle'].includes(layer.type)) return false;
+        if (!['Point', 'MultiPoint'].includes(feature.geometry?.type)) return false;
+        if (layer.type === 'symbol' && !symbolLayerHasVisibleIcon(layer, feature)) return false;
+        return true;
+      });
+      if (!visibleFeatures.length) return '';
+
+      const items = new Map();
+
+      visibleFeatures.forEach(feature => {
+        const layer = styleLayers.find(candidate => candidate.id === feature.layer?.id);
+        if (!layer) return;
+
+        const label = categoryForPoiOrLift(control, feature, layer);
+        const key = label.toLowerCase();
+        const iconName = iconNameForFeature(layer, feature);
+        const styleColor = resolveFeatureColor(layer, feature);
+
+        if (!items.has(key)) {
+          items.set(key, {
+            label,
+            iconName,
+            color: styleColor || '#2f3437'
+          });
+        } else {
+          const item = items.get(key);
+          if (!item.iconName && iconName) item.iconName = iconName;
+          if (styleColor) item.color = styleColor;
+        }
+      });
+
+      return [...items.values()]
+        .filter(item => item.label)
+        .sort((left, right) => left.label.localeCompare(right.label))
+        .map(item => {
+          const dataUrl = item.iconName && sprite ? cropIconDataUrl(sprite, item.iconName) : null;
+          const swatch = dataUrl
+            ? `<span style="display:inline-flex;width:34px;height:22px;flex:0 0 34px;align-items:center;justify-content:center"><img src="${dataUrl}" alt="" style="width:20px;height:20px;object-fit:contain"></span>`
+            : `<span style="display:inline-flex;width:34px;height:22px;flex:0 0 34px;align-items:center;justify-content:center">${liftFallbackSvg(item.label, safeCssColor(item.color, '#2f3437'))}</span>`;
+          return `<div class="legend-row">${swatch}<span>${escapeHtml(item.label)}</span></div>`;
+        })
+        .join('');
+    }
+
+    function poiOrLiftLegendRows(control, sprite, visibleSymbols) {
+      if (control.id === 'resort-lifts') return liftLegendRows(control, sprite, visibleSymbols);
+      const styleLayers = map.getStyle()?.layers || [];
+      // Use the features MapTiler says are rendered in the current viewport.
+      // The previous sprite/canvas comparison was too strict and removed real POIs.
+      const visibleFeatures = visibleSymbols.pois.map(entry => entry.feature).filter(feature => {
+        const layer = styleLayers.find(candidate => candidate.id === feature.layer?.id);
+        if (!layer || !layerVisibleAtCurrentZoom(layer)) return false;
+        if (!['symbol', 'circle'].includes(layer.type)) return false;
+        if (!['Point', 'MultiPoint'].includes(feature.geometry?.type)) return false;
+        if (layer.type === 'symbol' && !symbolLayerHasVisibleIcon(layer, feature)) return false;
+        return true;
+      });
+      if (!visibleFeatures.length) return '';
+
+      const items = new Map();
+
+      visibleFeatures.forEach(feature => {
+        const layer = styleLayers.find(candidate => candidate.id === feature.layer?.id);
+        if (!layer) return;
+
+        const label = categoryForPoiOrLift(control, feature, layer);
+        const iconName = iconNameForFeature(layer, feature);
+        const backgroundColor = hardcodedPoiBackgroundColor(label);
+        const key = label.toLowerCase();
+
+        if (!items.has(key)) {
+          items.set(key, {
+            label,
+            iconName,
+            backgroundColor,
+            features: []
+          });
+        }
+
+        const item = items.get(key);
+        if (!item.iconName && iconName) item.iconName = iconName;
+        if (!item.features.some(candidate => sameFeatureApprox(candidate, feature))) item.features.push(feature);
+      });
+
+      const sorted = [...items.values()]
+        .sort((left, right) => left.label.localeCompare(right.label));
+
+      const maximumRows = control.id === 'resort-pois' ? 16 : 12;
+      const visibleRows = sorted.slice(0, maximumRows);
+
+      const rows = visibleRows.map(item => {
+        const dataUrl = item.iconName && sprite ? cropCrispIconMaskDataUrl(sprite, item.iconName) : null;
+        const backgroundColor = safeCssColor(item.backgroundColor, control.color);
+        const swatch = dataUrl
+          ? `<span class="legend-icon-frame" style="background:${backgroundColor}"><span class="legend-icon-mask" style="--icon-url:url('${dataUrl}')"></span></span>`
+          : `<span class="legend-icon-frame" style="background:${backgroundColor}"><span style="display:block;width:7px;height:7px;background:#ffffff;"></span></span>`;
+        const featureIndexId = registerPoiLegendFeatures(item.features);
+        return `<div class="legend-row legend-poi-row" role="button" tabindex="0" data-poi-id="${featureIndexId}" data-poi-label="${escapeHtml(item.label)}" title="Highlight visible ${escapeHtml(item.label)} POIs on the map">${swatch}<span>${escapeHtml(item.label)}</span></div>`;
+      });
+
+      if (sorted.length > maximumRows) {
+        rows.push(`<div class="legend-more">+${sorted.length - maximumRows} more categories in the current map extent</div>`);
+      }
+      return rows.join('');
+    }
+
+    async function styleLegendRows(control, sprite, visibleSymbols) {
+      if (control.id === 'resort-runs') return runLegendRows(control);
+      if (control.id === 'resort-pois' || control.id === 'resort-lifts') {
+        return poiOrLiftLegendRows(control, sprite, visibleSymbols);
+      }
+      return fallbackStyleLegendRow(control);
+    }
+
+    let legendBuildToken = 0;
+    let legendBuildTimer = null;
+    let lastLegendViewKey = '';
+
+    function legendViewKey() {
+      const center = map.getCenter();
+      const visibilityState = controls
+        .map(control => `${control.id}:${state.controlState[control.id]?.visible ? 1 : 0}`)
+        .join('|');
+      return [
+        map.getZoom().toFixed(2),
+        center.lng.toFixed(4),
+        center.lat.toFixed(4),
+        map.getBearing().toFixed(1),
+        map.getPitch().toFixed(1),
+        visibilityState
+      ].join('|');
+    }
+
+    function requestLegendBuild({ force = false, delay = 120 } = {}) {
+      clearTimeout(legendBuildTimer);
+      legendBuildTimer = setTimeout(() => {
+        if (poiHighlightAnimating) return;
+        const nextViewKey = legendViewKey();
+        if (!force && nextViewKey === lastLegendViewKey) return;
+        lastLegendViewKey = nextViewKey;
+        buildLegend();
+      }, delay);
+    }
+
+    async function buildLegend() {
+      const token = ++legendBuildToken;
+      const body = document.getElementById('legend-body');
+      const sprite = await loadSprite();
+      if (token !== legendBuildToken) return;
+
+      const visibleSymbols = collectVisibleMapSymbols();
+      poiLegendFeatureIndex.clear();
+      const sections = [];
+
+      // Basemap controls remain available in the layer panel, but their
+      // Contour and Hillshade entries are intentionally excluded from the legend.
+      for (const sectionName of ['Ski Resort']) {
+        const sectionRows = [];
+        for (const control of controls.filter(item => item.section === sectionName && item.kind === 'style')) {
+          const dynamicLegend = control.id === 'resort-pois' || control.id === 'resort-lifts';
+          if (!state.controlState[control.id].visible) continue;
+          if (!dynamicLegend && !state.controlState[control.id].available) continue;
+          const rows = await styleLegendRows(control, sprite, visibleSymbols);
+          if (rows) sectionRows.push(`<div class="legend-subsection-title">${escapeHtml(control.label)}</div>${rows}`);
+        }
+        if (sectionRows.length) {
+          sections.push(`<div class="legend-section-title">${sectionName}</div>${sectionRows.join('')}`);
+        }
+      }
+
+      const analyticalRows = controls
+        .filter(control => control.section === 'Layers')
+        .map(analyticalLegendRows)
+        .filter(Boolean)
+        .join('');
+      if (analyticalRows) {
+        sections.push(`<div class="legend-section-title">Layers</div>${analyticalRows}`);
+      }
+
+      if (token !== legendBuildToken) return;
+      body.innerHTML = sections.join('') || '<div class="empty-message">No visible legend items in the current map extent.</div>';
+
+    }
+
+    const legendBody = document.getElementById('legend-body');
+
+    function activatePoiLegendRow(row) {
+      const featureIndexId = row?.dataset?.poiId;
+      if (!featureIndexId) return;
+      const features = poiLegendFeatureIndex.get(featureIndexId) || [];
+      highlightPoiFeatures(features);
+    }
+
+    legendBody.addEventListener('click', event => {
+      const row = event.target.closest('[data-poi-label]');
+      if (!row) return;
+      event.preventDefault();
+      event.stopPropagation();
+      activatePoiLegendRow(row);
+    });
+
+    legendBody.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const row = event.target.closest('[data-poi-label]');
+      if (!row) return;
+      event.preventDefault();
+      event.stopPropagation();
+      activatePoiLegendRow(row);
+    });
+
+    let legendCollapsed = false;
+    document.getElementById('legend-header').addEventListener('click', () => {
+      legendCollapsed = !legendCollapsed;
+      document.getElementById('legend-body').style.display = legendCollapsed ? 'none' : '';
+      document.getElementById('legend-toggle').textContent = legendCollapsed ? '+' : '−';
+    });
+
+    const controlPanel = document.getElementById('control-panel');
+    const controlPanelClose = document.getElementById('control-panel-close');
+    let layerPanelMapControl = null;
+
+    function setControlPanelOpen(open) {
+      controlPanel.classList.toggle('is-closed', !open);
+      controlPanel.setAttribute('aria-hidden', String(!open));
+
+      // The compact layers button is shown only while the full panel is closed.
+      if (layerPanelMapControl?.container) {
+        layerPanelMapControl.container.style.display = open ? 'none' : '';
+      }
+      if (layerPanelMapControl?.button) {
+        layerPanelMapControl.button.setAttribute('aria-expanded', String(open));
+      }
+    }
+
+    controlPanelClose.addEventListener('click', () => setControlPanelOpen(false));
+
+    class LayerPanelControl {
+      onAdd(mapInstance) {
+        this.map = mapInstance;
+        this.container = document.createElement('div');
+        this.container.className = 'maplibregl-ctrl maplibregl-ctrl-group map-layer-panel-control';
+
+        this.button = document.createElement('button');
+        this.button.type = 'button';
+        this.button.setAttribute('aria-label', 'Open layer controls');
+        this.button.setAttribute('aria-expanded', 'true');
+        this.button.title = 'Layers';
+        this.button.innerHTML = `
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 3 3.5 8 12 13 20.5 8 12 3Z"></path>
+            <path d="m3.5 12.5 8.5 5 8.5-5"></path>
+          </svg>`;
+        this.button.addEventListener('click', () => setControlPanelOpen(true));
+        this.container.appendChild(this.button);
+        return this.container;
+      }
+
+      onRemove() {
+        this.container?.remove();
+        this.map = undefined;
+      }
+    }
+
+    class ThreeDMapControl {
+      onAdd(mapInstance) {
+        this.map = mapInstance;
+        this.container = document.createElement('div');
+        this.container.className = 'maplibregl-ctrl maplibregl-ctrl-group map-3d-control';
+
+        this.button = document.createElement('button');
+        this.button.type = 'button';
+        this.button.textContent = '3D';
+        this.button.setAttribute('aria-label', 'Toggle 3D map view');
+        this.button.setAttribute('aria-pressed', 'false');
+        this.button.title = '3D view — right-drag or Ctrl-drag to rotate and tilt';
+        this.button.addEventListener('click', () => this.toggle());
+        this.container.appendChild(this.button);
+
+        this.sync = () => this.updateState();
+        this.map.on('pitchend', this.sync);
+        this.map.on('rotateend', this.sync);
+        this.updateState();
+        return this.container;
+      }
+
+      toggle() {
+        const active = this.map.getPitch() > 10;
+        this.map.easeTo({
+          pitch: active ? 0 : 58,
+          bearing: active ? 0 : -22,
+          duration: 900,
+          essential: true
+        });
+      }
+
+      updateState() {
+        const active = this.map.getPitch() > 10;
+        this.button?.classList.toggle('is-active', active);
+        this.button?.setAttribute('aria-pressed', String(active));
+        if (this.button) {
+          this.button.title = active
+            ? 'Return to 2D view — you can still right-drag or Ctrl-drag to rotate'
+            : '3D view — right-drag or Ctrl-drag to rotate and tilt';
+        }
+      }
+
+      onRemove() {
+        if (this.sync) {
+          this.map?.off('pitchend', this.sync);
+          this.map?.off('rotateend', this.sync);
+        }
+        this.container?.remove();
+        this.map = undefined;
+      }
+    }
+
+    const conventionsModal = document.getElementById('conventions-modal');
+    const openConventionsButton = document.getElementById('open-conventions');
+    const closeConventionsButton = document.getElementById('close-conventions');
+
+    function setConventionsModalOpen(open) {
+      conventionsModal.classList.toggle('is-open', open);
+      conventionsModal.setAttribute('aria-hidden', String(!open));
+      document.body.style.overflow = open ? 'hidden' : '';
+      if (open) closeConventionsButton.focus();
+      else openConventionsButton.focus();
+    }
+
+    openConventionsButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      setConventionsModalOpen(true);
+    });
+    closeConventionsButton.addEventListener('click', () => setConventionsModalOpen(false));
+    conventionsModal.addEventListener('click', event => {
+      if (event.target === conventionsModal) setConventionsModalOpen(false);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && conventionsModal.classList.contains('is-open')) {
+        setConventionsModalOpen(false);
+      }
+    });
+
+    document.querySelectorAll('.difficulty-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const region = tab.dataset.region;
+        document.querySelectorAll('.difficulty-tab').forEach(candidate => {
+          const active = candidate === tab;
+          candidate.classList.toggle('is-active', active);
+          candidate.setAttribute('aria-selected', String(active));
+        });
+        document.querySelectorAll('.difficulty-panel').forEach(panel => {
+          panel.classList.toggle('is-active', panel.dataset.regionPanel === region);
+        });
+      });
+    });
+
+    map.on('load', async () => {
+      // Append the custom layers button to the upper-right MapTiler control
+      // stack. MapLibre appends controls in registration order, so this sits
+      // directly below the last existing upper-right control and matches its size.
+      layerPanelMapControl = new LayerPanelControl();
+      map.addControl(layerPanelMapControl, 'top-right');
+
+      const threeDMapControl = new ThreeDMapControl();
+      map.addControl(threeDMapControl, 'top-right');
+
+      // Explicitly enable user-controlled rotation and inclination gestures.
+      map.dragRotate?.enable?.();
+      map.touchZoomRotate?.enableRotation?.();
+      map.touchPitch?.enable?.();
+      map.keyboard?.enableRotation?.();
+
+      setControlPanelOpen(true);
+
+      const terrain = map.getTerrain();
+      if (terrain) {
+        const styleJSON = map.getStyle();
+        const hillshadeLayer = styleJSON.layers.find(layer => layer.type === 'hillshade' && layer.source === terrain.source);
+        if (hillshadeLayer && !map.getSource('hillshade-dedicated')) {
+          const sourceDefinition = styleJSON.sources[terrain.source];
+          map.addSource('hillshade-dedicated', { ...sourceDefinition });
+          const layerIndex = styleJSON.layers.findIndex(layer => layer.id === hillshadeLayer.id);
+          const beforeId = styleJSON.layers[layerIndex + 1]?.id;
+          map.removeLayer(hillshadeLayer.id);
+          map.addLayer({ ...hillshadeLayer, source: 'hillshade-dedicated' }, beforeId);
+        }
+      }
+
+      addStyleLayerPopups();
+
+      try {
+        const response = await fetch('sample.geojson');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const points = await response.json();
+        addTrajectoryLayers(points);
+        if (Array.isArray(state.pendingDashboardPoints) && state.pendingDashboardPoints.length) {
+          updateTrajectoryLayers(state.pendingDashboardPoints);
+          state.pendingDashboardPoints = null;
+        }
+        window.parent?.postMessage({ type: 'SKI_MAP_LAYERS_READY' }, '*');
+      } catch (error) {
+        console.error('Could not load sample.geojson:', error);
+        controls.filter(control => control.kind === 'custom').forEach(control => {
+          state.controlState[control.id].available = false;
+        });
+      }
+
+      renderLayerControls();
+
+      // Re-identify visible pistes, lifts and POIs only after meaningful view changes.
+      // Debouncing avoids repeated full rendered-feature scans during map animations.
+      map.on('moveend', () => requestLegendBuild());
+      map.on('zoomend', () => requestLegendBuild());
+      map.on('rotateend', () => requestLegendBuild());
+      map.on('pitchend', () => requestLegendBuild());
+      map.on('style.load', () => requestLegendBuild({ force: true }));
+      requestLegendBuild({ force: true, delay: 0 });
+    });
+  </script>
+</body>
+</html>

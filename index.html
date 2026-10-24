@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ski Edge, Technique & Service Dashboard</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* 3D map tilt control */
+    .map-3d-controls{position:absolute;top:10px;right:10px;z-index:1000;display:flex;flex-direction:column;gap:6px;}
+    .map-3d-btn{background:white;border:1px solid #cde;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;color:#1f5a80;cursor:pointer;box-shadow:0 4px 12px #1f5a8020;white-space:nowrap;}
+    .map-3d-btn:hover{background:#dceef9;}
+    .map-3d-btn.active{background:#1f7fbd;color:white;border-color:#1f7fbd;}
+    .terrain-badge{position:absolute;bottom:8px;left:8px;z-index:900;background:#173e64cc;color:white;font-size:10px;font-weight:700;padding:4px 8px;border-radius:8px;backdrop-filter:blur(4px);}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="brand"><div class="brand-mark">⛷</div><div><b>EdgeDash</b><span>Technique · Equipment · Service</span></div></div>
+      <button class="nav active" data-view="overview">Overview</button>
+      <button class="nav" data-view="runs">Run Analysis</button>
+      <button class="nav" data-view="equipment">Ski & Service</button>
+      <button class="nav" data-view="coach">Coach & History</button>
+      <button class="nav" data-view="map">Map Layers</button>
+
+      <section class="rail-kpis run-rail-kpis" id="runRailKpis" aria-labelledby="runRailKpisTitle" hidden>
+        <h2 id="runRailKpisTitle">Run Analysis KPIs</h2>
+        <div class="rail-kpi-grid run-rail-kpi-grid">
+          <div class="metric"><span>Max speed</span><b id="runMaxSpeed">—</b></div>
+          <div class="metric"><span>Falls</span><b id="runFalls">—</b></div>
+          <div class="metric"><span>Runs count</span><b id="runCount">—</b></div>
+          <div class="metric"><span>Total time</span><b id="runTotalTime">—</b></div>
+          <div class="metric"><span>Elevation gained</span><b id="runElevGained">—</b></div>
+          <div class="metric"><span>Dominant technique</span><b id="runDomTechnique">—</b></div>
+        </div>
+      </section>
+
+      <div class="rail-summary">
+        <span>Selected ski</span><b id="railSelectedSki">Atomic Redster S9</b>
+        <span>Session</span><b id="railSession">Morning</b>
+        <span>Total distance</span><b id="railDistance">—</b>
+        <span>Duration</span><b id="railDuration">—</b>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ConnectedBoot dashboard</p>
+          <h1 id="pageTitle">Today Overview</h1>
+        </div>
+        <div class="top-pills">
+        <div class="pill">
+          <span style="color:#8a97a5;">Athlete</span>
+          <b>Nicole Salazar</b>
+        </div>
+
+        <div class="pill">
+          <span style="color:#8a97a5;">Date</span>
+          <b id="sessionDate">—</b>
+        </div>
+          <div class="weather-card"><span>Live weather</span><b>−3°C · groomed · light wind</b></div>
+          <button id="uploadZipButton" class="data-upload-button data-upload-icon-only" type="button" aria-label="Upload and process raw-data ZIP" title="Upload raw-data ZIP">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M5 14v5h14v-5"/></svg>
+          </button>
+          <input id="zipFileInput" type="file" accept=".zip,application/zip" hidden>
+        </div>
+      </header>
+
+      <section class="history-filter-bar" aria-label="Cumulative history and date filters">
+        <div class="history-filter-summary">
+          <div class="history-summary-heading">
+            <span>Cumulative history</span>
+            <button id="clearStoredHistory" class="history-summary-action history-danger" type="button" aria-label="Clear stored dashboard history" title="Clear stored dashboard history">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/></svg>
+            </button>
+          </div>
+          <div class="history-upload-line">
+            <b id="historyUploadCount">0 of 0 uploads</b>
+            <button id="datasetInfoButton" class="dataset-info-button" type="button" aria-label="Open dataset information" aria-expanded="false" aria-controls="datasetInfoPopover" title="Dataset information">i</button>
+            <div id="datasetInfoPopover" class="dataset-info-popover" role="dialog" aria-label="Current dataset information" hidden>
+              <div class="dataset-info-popover-head"><b>Current dataset</b><button id="datasetInfoClose" type="button" aria-label="Close dataset information">×</button></div>
+              <div id="datasetInfoContent" class="dataset-info-content">No data loaded.</div>
+            </div>
+          </div>
+          <small id="historyFilterStatus" class="visually-hidden">All seasons · 0 km in view</small>
+        </div>
+        <label class="filter-control-label">
+          <span class="filter-inline-title">Ski model</span>
+          <select id="globalSkiModelFilter" aria-label="Ski model"><option value="all">All ski models</option></select>
+        </label>
+        <label class="filter-control-label">
+          <span class="filter-inline-title">Season</span>
+          <select id="globalSeasonFilter" aria-label="Season"><option value="all">All seasons</option></select>
+        </label>
+        <label class="filter-control-label">
+          <span class="filter-inline-title">From</span>
+          <span class="date-input-wrap"><input id="globalDateFrom" type="date" aria-label="From date"></span>
+        </label>
+        <label class="filter-control-label">
+          <span class="filter-inline-title">To</span>
+          <span class="date-input-wrap"><input id="globalDateTo" type="date" aria-label="To date"></span>
+        </label>
+        <button id="clearHistoryFilters" class="ghost history-filter-icon-button" type="button" aria-label="Clear ski model, season and date filters" title="Clear filters">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16M10.6 5H5l6.2 7.1v5.2l2.6 1.7v-6.9L16 9.6"/></svg>
+        </button>
+      </section>
+
+      <section class="overall-kpis-bar" id="overallKpisBar" aria-labelledby="overallKpisTitle">
+        <h2 id="overallKpisTitle">Overall KPIs</h2>
+        <div class="overall-kpi-grid" id="sessionKpis"></div>
+        <div class="overview-secondary-kpis" id="overviewSecondarySummary" aria-label="Secondary overview indicators"></div>
+      </section>
+
+      <section id="overview" class="view active">
+        <div class="hero-grid">
+          <article class="glass score-hero overview-technique-card">
+            <div class="overview-card-heading">
+              <div><p class="eyebrow">Technique</p><h2>Technique summary</h2></div>
+              <span id="analyticsSourceBadge" class="analytics-source-badge">Waiting for analysed runs</span>
+            </div>
+            <div class="technique-score-compact">
+              <div class="ring compact-ring" id="techRing"><div><b id="techScoreRing">—</b><small>/100</small></div></div>
+              <div class="technique-score-copy">
+                <b id="techScoreTop">—</b>
+                <span id="overviewTechniqueLabel">Technique score</span>
+                <p id="overviewNote">Clear feedback based on boot IMU and acquisition analytics.</p>
+              </div>
+            </div>
+            <div class="technique-mini-summary" id="overviewTechniqueSummary">Technique distribution unavailable</div>
+          </article>
+
+          <article class="glass service-hero">
+            <div class="traffic-visual" id="serviceTrafficLight" data-status="yellow" aria-label="Service status: yellow">
+              <span class="signal-light signal-red"></span>
+              <span class="signal-light signal-yellow"></span>
+              <span class="signal-light signal-green"></span>
+            </div>
+            <p class="eyebrow">Service Status</p>
+            <h2 id="serviceStatus" class="service-status-badge service-status-yellow">YELLOW</h2>
+            <div class="service-progress-info" tabindex="0" aria-describedby="serviceProgressTooltip">
+              <div class="progress big-progress"><i id="serviceBar"></i></div>
+              <div id="serviceProgressTooltip" class="service-progress-tooltip" role="tooltip">
+                <b>Service distance</b>
+                <span><strong id="serviceKmSkiedHover">—</strong> skied since last service</span>
+                <span><strong id="serviceKmRemainingHover">—</strong> remaining to the configured service threshold</span>
+              </div>
+            </div>
+            <small id="kmRemainText">—</small>
+            <div class="service-action-row">
+              <button id="correctServiceKmButton" class="service-reset-button service-correct-button" type="button" title="Correct the current kilometers since service without double-counting stored runs">
+                <span aria-hidden="true">✎</span>
+                Correct km
+              </button>
+              <button id="resetServiceButton" class="service-reset-button" type="button" title="Record a completed ski service and restart the kilometer counter">
+                <span aria-hidden="true">↻</span>
+                Reset after service
+              </button>
+            </div>
+          </article>
+
+          <article class="glass map-preview overview-map-card">
+            <div class="map-title"><b>Technique Map</b><span>3D resort context</span></div>
+            <iframe
+              id="overviewMapFrame"
+              src="overview_map.html"
+              title="Overview technique map with ski resort context and 3D terrain"
+              loading="eager"
+            ></iframe>
+          </article>
+
+        </div>
+
+        <div class="content-grid overview-insight-grid">
+          <article class="panel technique-distribution-card">
+            <div class="overview-panel-heading"><h3>Technique Distribution</h3><span>Share of analysed points</span></div>
+            <div id="techniqueBars" class="technique-stacked-view"></div>
+          </article>
+          <article class="panel equipment-fit-card">
+            <div class="overview-panel-heading"><h3>Equipment Fit</h3><span id="equipmentFitConfidence">High confidence</span></div>
+            <div class="overview-status-line good"><span aria-hidden="true">✓</span><div><b id="equipmentFitTitle">Excellent match</b><small id="equipmentFitProfile">Advanced piste / carving</small></div></div>
+            <p id="equipmentFitDescription">The selected ski model is consistent with the dominant technique and current skill profile.</p>
+          </article>
+          <article class="panel service-recommendation-card">
+            <div class="overview-panel-heading"><h3>Service Recommendation</h3><span>Based on distance and edge status</span></div>
+            <div class="overview-status-line" id="serviceRecommendation"><span aria-hidden="true">✓</span><div><b>No service required</b><small>Continue monitoring</small></div></div>
+            <p id="serviceRecommendationDetail">Service guidance is calculated from kilometres since service and the configured threshold.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="runs" class="view">
+        <div class="run-layout run-layout-new">
+          <article class="panel selected-run-summary" id="selectedRunSummary">
+            <div>
+              <p class="eyebrow">Currently analysing</p>
+              <h2 id="selectedRunTitle">All runs</h2>
+              <p id="selectedRunSubtitle">Select a row below to inspect one run.</p>
+            </div>
+            <div class="selected-run-metrics">
+              <span><small>Duration</small><b id="selectedRunDuration">—</b></span>
+              <span><small>Technique</small><b id="selectedRunTechnique">—</b></span>
+              <span><small>Average speed</small><b id="selectedRunAvgSpeed">—</b></span>
+              <span><small>Snow condition</small><b id="selectedRunCondition">—</b></span>
+            </div>
+          </article>
+          <div class="run-bottom-row">
+            <article class="panel run-map-card run-map-card-maptiler">
+              <div class="run-map-header">
+                <div><p class="eyebrow">Spatial analysis</p><h3>Interactive 3D trail map</h3></div>
+                <span class="run-map-priority-label">Technique · Speed · Falls · Edge angle</span>
+              </div>
+              <iframe id="runAnalysisMap" src="run_analysis_map.html" class="run-map-frame" title="Run Analysis simplified MapTiler 3D analytical map" allow="geolocation" loading="eager"></iframe>
+            </article>
+            <div class="run-charts-col">
+              <article class="panel chart-card"><h3>Speed profile</h3><canvas id="speedChart"></canvas></article>
+              <article class="panel chart-card"><h3>Elevation profile</h3><canvas id="elevationChart"></canvas></article>
+              <article class="panel chart-card"><h3>Turn frequency</h3><canvas id="rhythmChart"></canvas></article>
+            </div>
+          </div>
+          <div id="runCards" class="run-list run-list-table"></div>
+        </div>
+      </section>
+
+      <section id="equipment" class="view">
+        <div class="equipment-grid equipment-grid-25-50-25">
+          <div class="equipment-left-stack">
+            <article class="panel ski-profile">
+              <p class="eyebrow">Ski Model</p>
+              <h2 id="skiProfileName">Atomic Redster S9</h2>
+              <p id="skiProfileSubtitle">Slalom · radius 12.5 m · 165 cm</p>
+              <div class="gauges">
+                <div class="gauge-wrap">
+                  <svg class="gauge-svg" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke="#d5e8f5" stroke-width="12" stroke-linecap="round"/>
+                    <path id="gaugeArcKm" d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke="#8fc4e6" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 157"/>
+                  </svg>
+                  <div class="gauge-label"><b id="kmSkiedGauge">—</b><span>Kilometers skied</span></div>
+                </div>
+                <div class="gauge-wrap">
+                  <svg class="gauge-svg" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke="#d5e8f5" stroke-width="12" stroke-linecap="round"/>
+                    <path id="gaugeArcRest" d="M10,65 A50,50 0 0,1 110,65" fill="none" stroke="#8fc4e6" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 157"/>
+                  </svg>
+                  <div class="gauge-label"><b id="kmRestGauge">—</b><span>Rest-km</span></div>
+                </div>
+              </div>
+              <div class="badge yellow" id="edgeBadge">YELLOW</div>
+            </article>
+
+            <article class="panel v-edge">
+              <span>V-Edge Recommendation</span>
+              <b>Sport</b>
+              <p>Balanced tuning for piste skiing and consistent carving.</p>
+            </article>
+
+            <article class="panel saved-skis-card">
+              <h3>Saved ski models</h3>
+              <div id="skiModels"></div>
+              <button class="ghost" onclick="openAddSki()">+ Add ski model</button>
+            </article>
+          </div>
+
+          <article class="panel equipment-map-card">
+            <div class="map-title">
+              <b>Ski repair partners</b>
+              <span>MapTiler · viewport-linked POIs</span>
+            </div>
+            <iframe
+              id="equipmentMapFrame"
+              src="service_partners_map.html"
+              title="Interactive map of ski repair and service partner points of interest"
+              loading="eager"
+            ></iframe>
+          </article>
+
+          <article class="panel service-partners-panel">
+            <div class="service-partners-heading">
+              <h3>Service partners</h3>
+              <span id="servicePartnerPill" class="service-partner-pill service-partner-pill-idle">Upload data</span>
+            </div>
+            <p id="servicePartnerContext" class="service-partner-context">Upload raw sensor data to search for ski-service businesses around the dataset AOI.</p>
+            <div id="servicePartnersList" class="service-partners-list">
+              <div class="service-partners-empty">No AOI-based lookup has been run yet.</div>
+            </div>
+            <button id="bookServiceButton" class="primary" type="button" onclick="openBookService()" disabled>Book Service</button>
+          </article>
+        </div>
+      </section>
+
+      <section id="coach" class="view">
+
+        <!-- Top bar: title + season selector -->
+        <div class="coach-topbar">
+          <h2 class="coach-page-title">Technique &amp; feedback</h2>
+          <div class="season-dropdown">
+            <select id="seasonSelect">
+              <option value="all">All seasons</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Observation banner -->
+        <div class="observation-banner">
+          <div class="obs-icon">💡</div>
+          <div>
+            <div class="obs-title">Observation</div>
+            <div class="obs-text" id="observationText">Your edge angle tends to decrease towards the end of longer sessions, particularly on your right ski.</div>
+          </div>
+        </div>
+
+        <!-- Two-column row: symmetry + technique distribution -->
+        <div class="coach-row-2">
+          <article class="panel coach-symmetry-card">
+            <h3 class="coach-section-label">Left / right symmetry</h3>
+            <div class="sym-bar-wrap">
+              <div class="sym-bar">
+                <div class="sym-left" id="symLeftBar" style="width:48%"><span id="symLeftPct">48%</span></div>
+                <div class="sym-right" id="symRightBar" style="width:52%"><span id="symRightPct">52%</span></div>
+              </div>
+            </div>
+            <div class="sym-labels"><span>Left</span><span>Right</span></div>
+          </article>
+
+          <article class="panel coach-technique-dist">
+            <h3 class="coach-section-label">Technique distribution</h3>
+            <div class="tech-dist-rows" id="techDistRows">
+              <!-- filled by JS -->
+            </div>
+          </article>
+        </div>
+
+        <!-- Falls overview table -->
+        <article class="panel coach-falls-card">
+          <div class="falls-header">
+            <h3 class="coach-section-label">Falls overview</h3>
+            <span class="falls-count" id="fallsCount">3 this season</span>
+          </div>
+          <table class="falls-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Slope</th>
+                <th>Snow condition</th>
+                <th>Time</th>
+                <th>Skiing level at the time</th>
+              </tr>
+            </thead>
+            <tbody id="fallsTableBody">
+              <!-- filled by JS -->
+            </tbody>
+          </table>
+        </article>
+
+        <!-- Disclaimer -->
+        <div class="falls-disclaimer">
+          <span class="disc-icon">ⓘ</span>
+          <span>Falls are shown as descriptive context only. No specific injury risk or cause is identified.</span>
+        </div>
+
+        <!-- Hidden stubs kept for JS compatibility -->
+        <div style="display:none">
+          <div id="coachNotes"></div>
+          <i id="leftSym"></i>
+          <i id="rightSym"></i>
+          <canvas id="historyChart"></canvas>
+        </div>
+
+      </section>
+
+      <section id="map" class="view">
+        <div class="map-page">
+          <article class="panel map-full" style="padding:0;overflow:hidden;display:flex;flex-direction:column;">
+            <div class="map-title" style="padding:14px 18px;flex-shrink:0;"><b>OpenSkiMap — Runs &amp; Lifts</b><span id="activeLayerLabel">Speed</span></div>
+            <iframe
+              id="mainMap"
+              src="map_layers.html"
+              style="flex:1;width:100%;border:none;display:block;min-height:0;"
+              title="Interactive ski resort and sensor analytics map"
+              allow="geolocation"
+              loading="eager"
+            ></iframe>
+          </article>
+          <!-- Hidden compatibility controls retained for the existing map-layer synchronization logic.
+               The visible layer controls and legends are provided inside map_layers.html. -->
+          <div class="map-layer-compatibility" hidden aria-hidden="true">
+            <label><input type="radio" name="layer" value="technique" checked> Technique</label>
+            <label><input type="radio" name="layer" value="speed"> Speed</label>
+            <label><input type="radio" name="layer" value="falls"> Falls</label>
+            <label><input type="radio" name="layer" value="edge"> Edging</label>
+            <div class="legend" id="legend"></div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="partner-footer" aria-label="Project funding and partner organizations">
+        <div class="partner-footer-inner">
+          <a class="partner-logo partner-logo-ispace" href="https://www.ispaceplus.at/" target="_blank" rel="noopener noreferrer" aria-label="Visit iSPACE website">
+            <img src="assets/partners/ispace.png" alt="iSPACE">
+          </a>
+          <a class="partner-logo partner-logo-research" href="https://www.salzburgresearch.at/" target="_blank" rel="noopener noreferrer" aria-label="Visit Salzburg Research website">
+            <img src="assets/partners/salzburg-research.jpg" alt="Salzburg Research">
+          </a>
+          <a class="partner-logo partner-logo-smart" href="https://www.smarttourismhub.at/" target="_blank" rel="noopener noreferrer" aria-label="Visit Smart Tourism Hub website">
+            <img src="assets/partners/smart-tourism-hub.jpg" alt="Smart Tourism Hub">
+          </a>
+          <a class="partner-logo partner-logo-land" href="https://www.salzburg.gv.at/" target="_blank" rel="noopener noreferrer" aria-label="Visit Land Salzburg website">
+            <img src="assets/partners/land-salzburg.png" alt="Land Salzburg">
+          </a>
+          <a class="partner-logo partner-logo-eu" href="https://www.efre.gv.at/" target="_blank" rel="noopener noreferrer" aria-label="Visit EFRE Austria website">
+            <img src="assets/partners/eu-cofunded.jpg" alt="Kofinanziert von der Europäischen Union">
+          </a>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Startup data-source gate -->
+  <div id="startupDataModal" class="modal-overlay startup-data-overlay" style="display:none">
+    <div class="modal-box startup-data-box" role="dialog" aria-modal="true" aria-labelledby="startupDataTitle">
+      <div class="startup-data-mark">⛷</div>
+      <p class="eyebrow">Dashboard data source</p>
+      <h2 id="startupDataTitle">Load your ski sensor data</h2>
+      <p class="startup-data-intro">Upload the raw-data ZIP to populate the complete dashboard with high-resolution CSV signals and acquisition-level JSON analytics.</p>
+      <div class="startup-data-responsibility">
+        <div><b>Raw CSV</b><span>Trajectory, detailed charts, IMU signals, elevation, GPS distance and fall screening</span></div>
+        <div><b>Analytics JSON</b><span>Turns, technique, carving, edging, G-force, skiing time, slope class and acquisition KPIs</span></div>
+      </div>
+      <button id="startupUploadRawData" class="primary startup-primary" type="button">⇧ Upload raw-data ZIP</button>
+      <button id="startupUseSampleData" class="ghost startup-secondary" type="button">Continue with sample.geojson</button>
+      <small class="startup-data-note">Processing runs locally in this browser. Choosing the sample provides demonstration values and fallback calculations only.</small>
+    </div>
+  </div>
+
+
+  <!-- Ski assignment required before raw-data processing -->
+  <div id="skiAssignmentModal" class="modal-overlay ski-assignment-overlay" style="display:none">
+    <div class="modal-box ski-assignment-box" role="dialog" aria-modal="true" aria-labelledby="skiAssignmentTitle">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Assign the uploaded data</p>
+          <h3 id="skiAssignmentTitle">Which ski produced these runs?</h3>
+          <p id="skiAssignmentFileName" class="pipeline-file-name">No archive selected</p>
+        </div>
+        <button id="closeSkiAssignment" class="modal-close" type="button" aria-label="Cancel ski selection">✕</button>
+      </div>
+
+      <div class="modal-body ski-assignment-body">
+        <div class="assignment-gate-note">
+          <span>⛷</span>
+          <div><b>A ski must be selected first.</b><br>Cleaning and dashboard loading will begin only after this information is confirmed.</div>
+        </div>
+
+        <div class="assignment-mode-switch" role="radiogroup" aria-label="Ski source">
+          <label class="assignment-mode active">
+            <input type="radio" name="skiAssignmentMode" value="existing" checked>
+            <span><b>Saved ski model</b><small>Assign the ZIP to an existing ski</small></span>
+          </label>
+          <label class="assignment-mode">
+            <input type="radio" name="skiAssignmentMode" value="new">
+            <span><b>Brand-new ski</b><small>Create and save a new model</small></span>
+          </label>
+        </div>
+
+        <section id="existingSkiAssignmentFields" class="assignment-fields">
+          <label>Saved ski model
+            <select id="uploadExistingSki"></select>
+          </label>
+          <div id="uploadExistingSkiPreview" class="ski-assignment-preview"></div>
+        </section>
+
+        <section id="newSkiAssignmentFields" class="assignment-fields" hidden>
+          <label>Ski name
+            <input id="uploadNewSkiName" type="text" placeholder="e.g. Rossignol Hero Elite ST TI" autocomplete="off">
+          </label>
+          <div class="modal-row">
+            <label>Type
+              <input id="uploadNewSkiType" type="text" placeholder="Slalom / Piste / GS…">
+            </label>
+            <label>Length (cm)
+              <input id="uploadNewSkiLength" type="number" min="80" max="250" placeholder="165">
+            </label>
+          </div>
+          <label>Turn radius (m)
+            <input id="uploadNewSkiRadius" type="number" min="3" max="80" step="0.1" placeholder="12.5">
+          </label>
+          <p class="assignment-help">The uploaded archive's full cleaned distance will be added to this ski's existing kilometers since service and will determine its traffic-light status.</p>
+        </section>
+
+        <p id="skiAssignmentError" class="assignment-error" role="alert"></p>
+      </div>
+
+      <div class="modal-foot ski-assignment-foot">
+        <button id="cancelSkiAssignment" class="ghost" type="button">Cancel</button>
+        <button id="confirmSkiAssignment" class="primary" type="button">Continue &amp; process ZIP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw ZIP processing workflow -->
+  <div id="dataPipelineModal" class="modal-overlay data-pipeline-overlay" style="display:none">
+    <div class="modal-box data-pipeline-box">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Preparing your ski data</p>
+          <h3>Processing sensor recordings</h3>
+          <p id="pipelineFileName" class="pipeline-file-name">No archive selected</p>
+        </div>
+        <button id="closePipelineModal" class="modal-close" type="button" aria-label="Close processing window">✕</button>
+      </div>
+
+      <div class="modal-body data-pipeline-body">
+        <div class="pipeline-privacy-note">
+          <span aria-hidden="true">🔒</span>
+          <div><b>Processed privately in this browser</b><br>Your files are not uploaded to a remote processing server.</div>
+        </div>
+
+        <div class="pipeline-progress-row">
+          <div class="pipeline-progress-track"><i id="pipelineProgressBar"></i></div>
+          <b id="pipelineProgressValue">0%</b>
+          <span id="pipelineSpinner" class="pipeline-spinner"></span>
+        </div>
+        <p id="pipelineStatus" class="pipeline-status">Select a raw-data ZIP to begin.</p>
+
+        <section class="pipeline-result-card" aria-live="polite">
+          <div class="pipeline-result-heading">
+            <span id="pipelineResultIcon" class="pipeline-result-icon" aria-hidden="true">⏳</span>
+            <div>
+              <h4 id="pipelineResultTitle">Preparing dashboard data</h4>
+              <p id="pipelineResultSubtitle">CSV sensor recordings and acquisition analytics will be combined automatically.</p>
+            </div>
+          </div>
+
+          <div class="pipeline-summary-grid pipeline-summary-grid-simple">
+            <div><span>Runs processed</span><b id="pipelineFiles">—</b></div>
+            <div><span>Analytics matched</span><b id="pipelineAnalytics">—</b></div>
+            <div><span>Distance added</span><b id="pipelineDistance">—</b></div>
+            <div><span>Map points prepared</span><b id="pipelinePoints">—</b></div>
+          </div>
+
+          <p id="pipelineActionNote" class="pipeline-action-note"></p>
+        </section>
+
+        <section id="pipelineTechnicalDetails" class="pipeline-technical-details">
+          <button id="pipelineTechnicalToggle" class="pipeline-technical-toggle" type="button" aria-expanded="false" aria-controls="pipelineTechnicalContent">
+            <span>View technical processing details</span>
+          </button>
+          <div id="pipelineTechnicalContent" class="pipeline-technical-content" hidden>
+            <div class="pipeline-summary-grid pipeline-summary-grid-technical">
+              <div><span>Cleaned rows</span><b id="pipelineRows">—</b></div>
+              <div><span>GeoJSON reduction</span><b id="pipelineReduction">—</b></div>
+              <div><span>Worst fidelity error</span><b id="pipelineFidelity">—</b></div>
+              <div><span>Events preserved</span><b id="pipelineEvents">—</b></div>
+            </div>
+            <div id="pipelineDetails" class="pipeline-details">The archive is being read and cleaned locally.</div>
+            <div id="pipelineWarnings" class="pipeline-warning"></div>
+
+            <div class="pipeline-downloads technical-downloads">
+              <button id="pipelineDownloadReport" class="ghost" type="button" disabled>Cleaning report</button>
+              <button id="pipelineDownloadCsv" class="ghost" type="button" disabled>Generate cleaned CSV</button>
+              <button id="pipelineDownloadGeojson" class="ghost" type="button" disabled>Generate merged GeoJSON</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="modal-foot data-pipeline-foot data-pipeline-foot-simple">
+        <button id="chooseAnotherZip" class="ghost" type="button">Choose another ZIP</button>
+        <button id="openDashboardAfterProcessing" class="primary" type="button" disabled>Open dashboard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Ski Model Modal -->
+  <div id="modalAddSki" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <div class="modal-head"><h3>Add Ski Model</h3><button class="modal-close" onclick="closeModal('modalAddSki')">✕</button></div>
+      <div class="modal-body">
+        <label>Ski name <input id="newSkiName" type="text" placeholder="e.g. Rossignol Hero Elite ST TI"></label>
+        <div class="modal-row">
+          <label>Type <input id="newSkiType" type="text" placeholder="Slalom / Piste / GS…"></label>
+          <label>Length (cm) <input id="newSkiLength" type="number" placeholder="165"></label>
+        </div>
+        <div class="modal-row">
+          <label>Turn radius (m) <input id="newSkiRadius" type="number" step="0.1" placeholder="12.5"></label>
+          <label>km since service <input id="newSkiKm" type="number" placeholder="0"></label>
+        </div>
+        <label>Edge condition
+          <select id="newSkiEdge">
+            <option value="GREEN">Green – Sharp</option>
+            <option value="YELLOW" selected>Yellow – Check soon</option>
+            <option value="RED">Red – Needs service</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost" style="width:auto;margin:0" onclick="closeModal('modalAddSki')">Cancel</button>
+        <button class="primary" style="width:auto;margin:0" onclick="addSkiModel()">Save ski</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Book Service Modal -->
+  <div id="modalBookService" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <div class="modal-head"><h3>Book Service</h3><button class="modal-close" onclick="closeModal('modalBookService')">✕</button></div>
+      <div class="modal-body">
+        <label>Select partner
+          <select id="bookPartner" disabled>
+            <option value="">Upload raw data to retrieve nearby partners</option>
+          </select>
+        </label>
+        <div class="modal-row">
+          <label>Date <input id="bookDate" type="date"></label>
+          <label>Time <input id="bookTime" type="time" value="09:00"></label>
+        </div>
+        <label>Ski to service <select id="bookSki"></select></label>
+        <label>Service notes <textarea id="bookNotes" placeholder="e.g. sharpen edges, base grind, wax…" rows="3"></textarea></label>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost" style="width:auto;margin:0" onclick="closeModal('modalBookService')">Cancel</button>
+        <button class="primary" style="width:auto;margin:0" onclick="confirmBooking()">Confirm booking</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" style="display:none"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="vendor/jszip.min.js"></script>
+  <script src="service_partners.js"></script>
+  <script src="history_store.js"></script>
+  <script src="app.js"></script>
+  <script src="data_pipeline.js"></script>
+</body>
+</html>
