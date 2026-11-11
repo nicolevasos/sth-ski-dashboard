@@ -1013,17 +1013,13 @@ function computeMetrics(rows){
     });
     return counts;
   }, {}) : pointTechniqueCounts;
-  if(analyticsRecords.length){
-    safeRows.filter(point => !point.analytics_id).forEach(point => {
-      const technique = classifyTechnique(point);
-      techniqueCounts[technique] = (techniqueCounts[technique] || 0) + 1;
-    });
-  }
+  // When acquisition JSON is present, techniqueCounts is in TURNS. Rows without analytics are
+  // not added here: mixing per-GPS-row heuristic counts into a per-turn count distorts the shares.
   const mainTechnique = Object.entries(techniqueCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
   const falls = detectFalls(safeRows);
   const serviceRemaining = Math.max(0, CONFIG.serviceThresholdKm - CONFIG.kmSinceService);
-  const leftShare = clamp(50 - (mean(leftAcc)-mean(rightAcc))*0.6, 35, 65);
-  const start = allTimes.length ? new Date(Math.min(...allTimes.map(date => date.getTime()))) : null;
+const total = mean(leftAcc) + mean(rightAcc);
+const leftShare = clamp(mean(leftAcc) / total * 100, 30, 70);  const start = allTimes.length ? new Date(Math.min(...allTimes.map(date => date.getTime()))) : null;
   const end = allTimes.length ? new Date(Math.max(...allTimes.map(date => date.getTime()))) : null;
   const verticalDescent = metricGroups.reduce((total, groupRows) => total + groupRows.slice(1).reduce((sum, point, index) => {
     const previousAltitude = Number(groupRows[index]?.alt);
@@ -1192,12 +1188,10 @@ function renderText(){
 
   // Technique distribution bars (sorted largest first)
   if ($('techDistRows')) {
-    const total = points.length || 1;
-    const techEntries = Object.entries(metrics.techniqueCounts).sort((a, b) => b[1] - a[1]);
-    $('techDistRows').innerHTML = techEntries.map(([name, count]) => {
-      const pct = Math.round(count / total * 100);
+    // Same denominator as the Overview: the sum of the technique counts
+    $('techDistRows').innerHTML = techniqueShares(metrics.techniqueCounts).map(({ name, pct }) => {
       return `<div class="tech-dist-row">
-        <span class="tech-dist-name">${name}</span>
+        <span class="tech-dist-name">${escapeDashboardText(name)}</span>
         <div class="tech-dist-track"><div class="tech-dist-fill" style="width:${pct}%"></div></div>
         <span class="tech-dist-pct">${pct}%</span>
       </div>`;
@@ -1310,6 +1304,16 @@ async function correctServiceKilometers(){
   const activeMode = document.querySelector('.map-pill.active')?.dataset.mode;
   if(activeMode === 'service') drawMapLayer('service', ['run']);
   showToast(`✓ ${skiName}: ${formatServiceKm(CONFIG.kmSinceService)} km since service · ${CONFIG.edgeCondition.toUpperCase()}`);
+}
+
+// Single source of truth for technique percentages: every panel divides by the
+// sum of the technique counts, so all panels agree and add up to ~100%.
+function techniqueShares(counts) {
+  const entries = Object.entries(counts || {})
+    .map(([name, count]) => [name, Math.max(0, Number(count) || 0)])
+    .sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((sum, [, count]) => sum + count, 0) || 1;
+  return entries.map(([name, count]) => ({ name, count, pct: Math.round(count / total * 100) }));
 }
 
 function renderBars(){
